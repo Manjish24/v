@@ -8,6 +8,7 @@ const createCertificateId = () =>
 export const getAssessmentForTaking = async (req, res) => {
   try {
     const { id } = req.params;
+    const userId = req.user.id;
     const assessment = await dataService.getAssessmentById(id);
     if (!assessment) {
       return res.status(404).json({ success: false, message: "Assessment not found." });
@@ -60,6 +61,14 @@ export const submitAssessment = async (req, res) => {
     const assessment = await dataService.getAssessmentById(id);
     if (!assessment) {
       return res.status(404).json({ success: false, message: "Assessment not found." });
+    }
+
+    const enrollment = await dataService.getEnrollment(userId, assessment.courseId);
+    if (!enrollment || enrollment.status !== "completed" || enrollment.progressPercentage < 100) {
+      return res.status(403).json({
+        success: false,
+        message: "Complete every course module before taking the certification assessment."
+      });
     }
 
     // Check if already passed

@@ -129,11 +129,35 @@ export const updateModuleProgress = async (req, res) => {
     const progressPercentage = Math.min(100, Math.round((completedModules.length / totalModules) * 100));
     const status = progressPercentage === 100 ? "completed" : "in-progress";
 
-    const updated = await dataService.updateEnrollment(enrollment.id, {
+    const updates = {
       completedModules,
       progressPercentage,
       status
-    });
+    };
+
+    // A course without a final assessment awards its credential as soon as every
+    // module is complete. Courses with an assessment award it after a passing score.
+    const assessments = await dataService.getAssessmentsByCourse(id);
+    if (status === "completed" && assessments.length === 0 && !enrollment.certificateId) {
+      const certificateId = `CERT-IMD-${new Date().getFullYear()}-${uuidv4().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+      const issueDate = new Date().toISOString();
+      updates.certificateId = certificateId;
+      updates.certificateIssuedAt = issueDate;
+
+      const user = await dataService.getUserById(userId);
+      const certificates = user?.certificates || [];
+      certificates.push({
+        certificateId,
+        title: `${course.title} - Course Completion Certificate`,
+        courseTitle: course.title,
+        issuer: "Ministry of Earth Sciences & India Meteorological Department",
+        issueDate,
+        courseId: id
+      });
+      await dataService.updateUser(userId, { certificates });
+    }
+
+    const updated = await dataService.updateEnrollment(enrollment.id, updates);
 
     res.status(200).json({
       success: true,

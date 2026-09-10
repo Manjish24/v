@@ -30,7 +30,8 @@ export const CertificateModal = ({ isOpen, onClose, certificate }) => {
       document.body.appendChild(link);
       link.click();
       link.remove();
-      URL.revokeObjectURL(url);
+      // Keep the object URL alive long enough for slower browsers to start the download.
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (error) {
       alert(error.message || "Certificate download failed.");
     } finally {
