@@ -1,439 +1,266 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import api from '../../services/api';
-import VideoEmbed from '../../components/common/VideoEmbed';
-import Badge from '../../components/common/Badge';
-import {
-  BookOpen,
-  Tv,
-  Sparkles,
-  Save,
-  Plus,
-  Trash2,
-  CheckCircle2,
-  AlertCircle,
-  FileText
-} from 'lucide-react';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { api } from "../../services/api";
+import { PlusCircle, Trash2, ArrowLeft, BookOpen, Video, FileText } from "lucide-react";
 
-export default function CreateCourse() {
+export const CreateCourse = () => {
   const navigate = useNavigate();
+  const [submitting, setSubmitting] = useState(false);
 
-  // Basic Details
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [subject, setSubject] = useState('Machine Learning');
-  const [difficulty, setDifficulty] = useState('Intermediate');
-  const [duration, setDuration] = useState('6 Weeks');
-  const [objectivesText, setObjectivesText] = useState('');
-  const [prerequisitesText, setPrerequisitesText] = useState('');
-  const [status, setStatus] = useState('PUBLISHED');
+  const [courseData, setCourseData] = useState({
+    title: "",
+    category: "Radar Meteorology",
+    duration: "6 Weeks",
+    level: "Intermediate",
+    description: "",
+    thumbnail: "https://images.unsplash.com/photo-1590055531615-f16d36ffe8ec?auto=format&fit=crop&w=800&q=80",
+    modules: [
+      {
+        id: "mod-1",
+        title: "Module 1: Principles and Atmospheric Foundations",
+        duration: "45 mins",
+        videoUrl: "https://www.youtube.com/embed/dQw4w9WgXcQ",
+        content: "Overview of basic concepts, atmospheric dynamics, and operational guidelines.",
+        resources: [{ name: "Module_Handbook.pdf", type: "pdf", size: "2.4 MB" }]
+      }
+    ]
+  });
 
-  // YouTube Material & AI State
-  const [youtubeUrl, setYoutubeUrl] = useState('https://www.youtube.com/watch?v=Gv9_4yMHFhI');
-  const [extractedVideoId, setExtractedVideoId] = useState('Gv9_4yMHFhI');
-  const [videoTitle, setVideoTitle] = useState('Lecture 1: Core Fundamentals & Architectures');
-  const [theoryText, setTheoryText] = useState('');
-
-  // AI Summarizer State (Section 14 & 39)
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiResult, setAiResult] = useState(null);
-  const [aiMessage, setAiMessage] = useState('');
-
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  // YouTube URL validator & extractor
-  const handleUrlChange = (url) => {
-    setYoutubeUrl(url);
-    const regExp = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-    const match = url.match(regExp);
-    if (match && match[1].length === 11) {
-      setExtractedVideoId(match[1]);
-      setError('');
-    } else {
-      setExtractedVideoId(null);
-    }
-  };
-
-  // Google Gemini AI Video Summarizer (Section 14 & 39)
-  const handleRunAiSummary = async () => {
-    if (!youtubeUrl || !extractedVideoId) {
-      setError('Please provide a valid YouTube URL first.');
-      return;
-    }
-
-    setAiLoading(true);
-    setAiMessage('');
-    setError('');
-
-    try {
-      const res = await api.post('/ai/youtube-summary', {
-        youtube_url: youtubeUrl,
-        course_title: title || subject,
-        description: description || 'Lecture video'
-      });
-
-      if (res.data.success) {
-        const data = res.data.data;
-        setAiResult(data);
-        setAiMessage('Gemini AI has analyzed the lecture! Review the summary and objectives below.');
-
-        // Optionally prefill description and objectives if empty
-        if (!description && data.summary) setDescription(data.summary);
-        if (!objectivesText && data.learning_objectives) {
-          setObjectivesText(data.learning_objectives.join('\n'));
+  const handleAddModule = () => {
+    const newIdx = courseData.modules.length + 1;
+    setCourseData({
+      ...courseData,
+      modules: [
+        ...courseData.modules,
+        {
+          id: `mod-${newIdx}`,
+          title: `Module ${newIdx}: New Instructional Unit`,
+          duration: "50 mins",
+          videoUrl: "https://www.youtube.com/embed/dQw4w9WgXcQ",
+          content: "Session summary and technical explanation.",
+          resources: []
         }
-      }
-    } catch (err) {
-      setError(err.response?.data?.message || 'AI summarizer encountered an error.');
-    } finally {
-      setAiLoading(false);
-    }
+      ]
+    });
   };
 
-  const handleCreateCourse = async (e) => {
+  const handleModuleChange = (index, field, value) => {
+    const updated = [...courseData.modules];
+    updated[index][field] = value;
+    setCourseData({ ...courseData, modules: updated });
+  };
+
+  const handleRemoveModule = (index) => {
+    if (courseData.modules.length === 1) return;
+    setCourseData({
+      ...courseData,
+      modules: courseData.modules.filter((_, i) => i !== index)
+    });
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!extractedVideoId) {
-      setError('A valid YouTube lecture video link is required.');
+    if (!courseData.title) {
+      alert("Please provide a course title.");
       return;
     }
-
-    setSaving(true);
-    setError('');
-
+    setSubmitting(true);
     try {
-      const objectives = objectivesText
-        .split('\n')
-        .map(o => o.trim())
-        .filter(Boolean);
-
-      const prerequisites = prerequisitesText
-        .split('\n')
-        .map(p => p.trim())
-        .filter(Boolean);
-
-      // Step 1: Create Course
-      const courseRes = await api.post('/trainer/courses', {
-        title,
-        description,
-        subject,
-        difficulty,
-        duration,
-        learning_objectives: objectives,
-        prerequisites,
-        status
-      });
-
-      if (!courseRes.data.success) {
-        setError(courseRes.data.message);
-        setSaving(false);
-        return;
-      }
-
-      const courseId = courseRes.data.data.id;
-
-      // Step 2: Add YouTube Video Material (Section 12)
-      await api.post(`/trainer/courses/${courseId}/materials`, {
-        title: videoTitle || 'Lecture 1: Core Principles',
-        type: 'VIDEO',
-        youtube_url: youtubeUrl,
-        description: aiResult?.summary || 'Primary lecture video module.'
-      });
-
-      // Step 3: Add Theory reading if provided
-      if (theoryText.trim()) {
-        await api.post(`/trainer/courses/${courseId}/materials`, {
-          title: 'Core Reading & Theory',
-          type: 'TEXT/THEORY',
-          description: theoryText
-        });
-      }
-
-      navigate('/trainer/courses');
+      await api.createCourse(courseData);
+      alert("Course created successfully!");
+      navigate("/trainer/manage-courses");
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to create course.');
+      alert(err.message || "Failed to create course.");
     } finally {
-      setSaving(false);
+      setSubmitting(false);
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Create Course & Curriculum</h1>
-        <p className="text-xs sm:text-sm text-slate-500">
-          Section 12, 14 & 23: Add learning modules, embed YouTube lecture streaming, and apply Google Gemini AI educational summarization.
-        </p>
+    <div className="max-w-4xl mx-auto space-y-6">
+      <div className="flex items-center space-x-3">
+        <button
+          onClick={() => navigate("/trainer/dashboard")}
+          className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition"
+        >
+          <ArrowLeft className="w-4 h-4" />
+        </button>
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-900">Create New Training Course</h1>
+          <p className="text-xs text-slate-500">
+            Author comprehensive meteorological curriculum for Ministry of Earth Sciences cadre.
+          </p>
+        </div>
       </div>
 
-      {error && (
-        <div className="p-4 rounded-xl bg-rose-50 text-rose-700 border border-rose-200 text-xs flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {aiMessage && (
-        <div className="p-4 rounded-xl bg-purple-50 text-purple-700 border border-purple-200 text-xs flex items-center gap-2">
-          <Sparkles className="w-4 h-4 flex-shrink-0" />
-          <span>{aiMessage}</span>
-        </div>
-      )}
-
-      <form onSubmit={handleCreateCourse} className="space-y-6">
-        {/* Course Details Card */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-4">
-          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-            <BookOpen className="w-5 h-5 text-purple-600" />
-            Basic Course Information
-          </h2>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Basic Course Info */}
+        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+          <h2 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-2">Course Information</h2>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Course Title
-            </label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Course Title</label>
             <input
               type="text"
               required
-              placeholder="e.g. Applied Machine Learning with Python"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-hidden focus:border-purple-500"
+              value={courseData.title}
+              onChange={(e) => setCourseData({ ...courseData, title: e.target.value })}
+              placeholder="e.g. Advanced Doppler Weather Radar (DWR) Echo Analysis"
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-amber-500 focus:bg-white"
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Subject
-              </label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Discipline / Category</label>
               <select
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm bg-white"
+                value={courseData.category}
+                onChange={(e) => setCourseData({ ...courseData, category: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
               >
-                <option value="Machine Learning">Machine Learning</option>
-                <option value="Web Development">Web Development</option>
-                <option value="Cloud Computing">Cloud Computing</option>
-                <option value="Data Science">Data Science</option>
-                <option value="Cybersecurity">Cybersecurity</option>
+                <option value="Radar Meteorology">Radar Meteorology</option>
+                <option value="Atmospheric Modeling">Atmospheric Modeling (NWP)</option>
+                <option value="Disaster Risk Reduction">Disaster Risk Reduction (Cyclone)</option>
+                <option value="Agricultural Meteorology">Agricultural Meteorology</option>
+                <option value="Marine Meteorology">Marine & Ocean Observing</option>
               </select>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Difficulty
-              </label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Target Skill Level</label>
               <select
-                value={difficulty}
-                onChange={(e) => setDifficulty(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm bg-white"
+                value={courseData.level}
+                onChange={(e) => setCourseData({ ...courseData, level: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
               >
                 <option value="Beginner">Beginner</option>
                 <option value="Intermediate">Intermediate</option>
                 <option value="Advanced">Advanced</option>
+                <option value="All Levels">All Levels</option>
               </select>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Estimated Duration
-              </label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Duration</label>
               <input
                 type="text"
-                placeholder="e.g. 6 Weeks (24 Hours)"
-                value={duration}
-                onChange={(e) => setDuration(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-hidden focus:border-purple-500"
+                value={courseData.duration}
+                onChange={(e) => setCourseData({ ...courseData, duration: e.target.value })}
+                placeholder="e.g. 4 Weeks"
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Course Description
-            </label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Course Description & Objectives</label>
             <textarea
               rows={3}
-              required
-              placeholder="Comprehensive description of the course, target competencies, and real-world applications..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-hidden focus:border-purple-500"
+              value={courseData.description}
+              onChange={(e) => setCourseData({ ...courseData, description: e.target.value })}
+              placeholder="Outline what trainees will master..."
+              className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-amber-500"
             />
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Learning Objectives (1 per line)
-              </label>
-              <textarea
-                rows={3}
-                placeholder="Understand linear regression&#10;Compute Mean Squared Error&#10;Implement cross-validation"
-                value={objectivesText}
-                onChange={(e) => setObjectivesText(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-hidden focus:border-purple-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Prerequisites (1 per line)
-              </label>
-              <textarea
-                rows={3}
-                placeholder="Basic Python programming&#10;Fundamental Linear Algebra"
-                value={prerequisitesText}
-                onChange={(e) => setPrerequisitesText(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-hidden focus:border-purple-500"
-              />
-            </div>
-          </div>
         </div>
 
-        {/* YouTube Video Material & AI Summarization Card (Section 12, 14 & 39) */}
-        <div className="bg-white rounded-2xl p-6 border border-purple-200 shadow-xs space-y-5">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Tv className="w-5 h-5 text-red-600" />
-                YouTube Lecture Video Embedding
-              </h2>
-              <p className="text-xs text-slate-500">
-                Section 12: Stores YouTube video ID. Video is streamed through responsive iframe embedding.
-              </p>
+        {/* Modules Builder */}
+        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">Curriculum Modules</h2>
+              <p className="text-[11px] text-slate-500">Add recorded lectures, slide decks, and lesson syllabi</p>
             </div>
-            <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded uppercase">
-              YouTube Embed
-            </span>
+            <button
+              type="button"
+              onClick={handleAddModule}
+              className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold rounded-xl border border-amber-200 transition flex items-center space-x-1"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span>Add Module</span>
+            </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                Lecture Title
-              </label>
-              <input
-                type="text"
-                required
-                value={videoTitle}
-                onChange={(e) => setVideoTitle(e.target.value)}
-                placeholder="e.g. Lecture 1: Supervised Learning Foundations"
-                className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                YouTube URL
-              </label>
-              <input
-                type="url"
-                required
-                value={youtubeUrl}
-                onChange={(e) => handleUrlChange(e.target.value)}
-                placeholder="https://www.youtube.com/watch?v=..."
-                className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200"
-              />
-            </div>
-          </div>
-
-          {/* Instant Video Embed Preview */}
-          {extractedVideoId ? (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-emerald-700 flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Validated YouTube ID: {extractedVideoId}
-                </span>
-
-                {/* Gemini AI Summarizer Trigger Button */}
-                <button
-                  type="button"
-                  onClick={handleRunAiSummary}
-                  disabled={aiLoading}
-                  className="px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  {aiLoading ? 'Gemini AI Analyzing...' : 'Run Gemini AI Summarizer'}
-                </button>
-              </div>
-
-              <div className="max-w-xl mx-auto">
-                <VideoEmbed videoId={extractedVideoId} title={videoTitle} />
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs text-rose-500">
-              Please enter a valid YouTube URL (e.g. https://www.youtube.com/watch?v=Gv9_4yMHFhI or https://youtu.be/bMknfKXIFA8).
-            </p>
-          )}
-
-          {/* AI Generated Analysis Review Box (Section 14 & 39) */}
-          {aiResult && (
-            <div className="p-4 rounded-xl bg-purple-50/70 border border-purple-200 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-extrabold text-purple-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                  Gemini AI Educational Analysis (Review Before Publishing)
-                </span>
-                <span className="text-[10px] text-purple-700 font-semibold">Grounded in Lecture Data</span>
-              </div>
-
-              <p className="text-xs text-slate-700 leading-relaxed font-medium">
-                <strong>Summary:</strong> {aiResult.summary}
-              </p>
-
-              {aiResult.topics && (
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  <span className="text-[11px] font-bold text-slate-700 mr-1">Extracted Topics:</span>
-                  {aiResult.topics.map((t, idx) => (
-                    <span key={idx} className="px-2 py-0.5 rounded bg-white text-purple-800 text-[10px] font-bold border border-purple-200">
-                      {t}
-                    </span>
-                  ))}
+          <div className="space-y-4">
+            {courseData.modules.map((mod, idx) => (
+              <div key={idx} className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700">Module #{idx + 1}</span>
+                  {courseData.modules.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveModule(idx)}
+                      className="text-rose-500 hover:text-rose-700 text-xs flex items-center space-x-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Remove</span>
+                    </button>
+                  )}
                 </div>
-              )}
-            </div>
-          )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2">
+                    <input
+                      type="text"
+                      value={mod.title}
+                      onChange={(e) => handleModuleChange(idx, "title", e.target.value)}
+                      placeholder="Module Title"
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs"
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      value={mod.duration}
+                      onChange={(e) => handleModuleChange(idx, "duration", e.target.value)}
+                      placeholder="Duration (e.g. 45 mins)"
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <input
+                    type="text"
+                    value={mod.videoUrl}
+                    onChange={(e) => handleModuleChange(idx, "videoUrl", e.target.value)}
+                    placeholder="Video Embed / YouTube URL"
+                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs"
+                  />
+                </div>
+
+                <div>
+                  <textarea
+                    rows={2}
+                    value={mod.content}
+                    onChange={(e) => handleModuleChange(idx, "content", e.target.value)}
+                    placeholder="Module study notes & technical explanation..."
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Theory / Reading Material */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-4">
-          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-            <FileText className="w-5 h-5 text-blue-600" />
-            Core Theory & Academic Reading Notes
-          </h2>
-          <textarea
-            rows={4}
-            placeholder="Add theoretical explanations, mathematical derivations, or reading summaries..."
-            value={theoryText}
-            onChange={(e) => setTheoryText(e.target.value)}
-            className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-hidden focus:border-purple-500"
-          />
-        </div>
-
-        {/* Action Controls */}
-        <div className="flex items-center justify-between pt-2">
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className="px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white font-bold text-slate-700"
+        {/* Submit */}
+        <div className="flex justify-end space-x-3">
+          <button
+            type="button"
+            onClick={() => navigate("/trainer/dashboard")}
+            className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition"
           >
-            <option value="PUBLISHED">Publish Course Immediately</option>
-            <option value="DRAFT">Save as Draft</option>
-          </select>
-
+            Cancel
+          </button>
           <button
             type="submit"
-            disabled={saving}
-            className="px-6 py-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-colors shadow-md shadow-purple-500/20 flex items-center gap-2"
+            disabled={submitting}
+            className="px-6 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-bold rounded-xl text-xs shadow-md transition disabled:opacity-50"
           >
-            <Save className="w-4 h-4" />
-            {saving ? 'Creating Course...' : 'Save & Publish Course'}
+            {submitting ? "Publishing Course..." : "Publish Course to IMD Portal"}
           </button>
         </div>
       </form>
     </div>
   );
-}
+};

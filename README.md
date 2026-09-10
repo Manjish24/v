@@ -1,109 +1,164 @@
-# Capacity Connect (SIH Problem Statement 26075)
-
-> **Role-Based Digital Capacity-Building and Learning Management Portal**
-> Connecting Trainees, Trainers, and Institutional Administrators.
-
----
-
-## 🚀 Key Features & Architectural Highlights
-
-- **3 Distinct Role Portals (RBAC)**:
-  - **Trainee**: Comprehensive skill profiles (skills with levels), course enrollment, interactive video lectures via YouTube embeds, server-scored MCQ evaluations, authentic browser-generated PDF certificates with verifiable QR codes, feedback submission, and query helpdesk.
-  - **Trainer**: Course authoring with YouTube video embedding, Google Gemini AI automated video summarization & objective extraction, MCQ questionnaire creation with deadlines, trainee performance analytics (Recharts), and resource library.
-  - **Administrator**: Governance console, user approval workflow (Pending, Approved, Suspended), trainee & trainer databases, analytics, query resolutions, announcements, and the flagship **Capacity Competency Matching Engine**.
-- **Flagship Innovation — Capacity Competency**:
-  - Solves *"Who is the most suitable trainer to teach this subject?"*
-  - Multi-criteria weighted scoring: Skills (35%), Experience (25%), Qualifications (15%), Certifications (15%), Past Teaching Performance (10%).
-  - Semantic Google Gemini AI reasoning grounded in verified database credentials.
-- **YouTube Embed Delivery**:
-  - Trainers enter YouTube URLs; system validates and extracts video IDs, streaming lectures via responsive iframes without costly hosting overhead.
-- **Browser-Side PDF Certification & Public QR Verification**:
-  - Backend verifies 100% course completion and passing assessment scores before issuing a unique certificate number and high-entropy verification token (`cc_token_...`).
-  - Trainees generate high-resolution certificate PDFs directly in their browser using `html2canvas` & `jspdf`.
-  - Public verification route (`/verify/:token`) validates cryptographic records against the database.
-- **Google Gemini AI Integration (`@google/genai`)**:
-  - Trainee course recommendations based on profile skills and interests.
-  - YouTube video transcript / lecture summarization and learning objective extraction.
-  - Semantic Capacity Competency trainer matching explanations.
-  - Academic query assistant grounded in course context.
+# CAPACITY CONNECT
+### A Digital Capacity Building and Learning Management Portal
+**Smart India Hackathon 2026 — Problem Statement ID: 26075**  
+**Organization:** Ministry of Earth Sciences (MoES)  
+**Department:** India Meteorological Department (IMD)  
+**Theme:** Smart Education | **Category:** Software  
 
 ---
 
-## 🛠️ Technology Stack
+## 🌟 Executive Summary
 
-| Layer | Technologies |
-| :--- | :--- |
-| **Frontend** | React.js, Vite, Tailwind CSS, React Router v6, Recharts, Lucide Icons, jsPDF, html2canvas, qrcode.react |
-| **Backend** | Node.js, Express.js, REST APIs, CORS, JWT authentication, RBAC middleware |
-| **Database** | Supabase PostgreSQL schema with 19 relational tables, indexes, constraints, seeds, and in-memory zero-config fallback |
-| **AI** | Google Gemini API via `@google/genai` SDK |
-| **Hosting** | Render (Backend API), Vercel (Frontend Client) |
+**CAPACITY CONNECT** is a centralized, secure, role-based Digital Capacity Building and Learning Management Portal built to train, evaluate, and certify scientific, operational, and technical cadres across the Ministry of Earth Sciences (MoES), India Meteorological Department (IMD), NCMRWF, INCOIS, and IITM.
 
 ---
 
-## ⚡ Quick Start Guide
+## 👥 Three Core User Roles
 
-### Prerequisites
-- Node.js (v18+)
-- npm (v9+)
+### 1. Trainee / Forecaster
+- **Professional Cadre Profiles:** Qualifications, operational work experience, meteorological competencies, and verifiable certifications.
+- **Curriculum & Resource Center:** Interactive lecture viewers with downloadable operational standard operating procedures (SOPs), radar handbooks, and slide decks.
+- **Subject-Wise Timed MCQ Assessments:** Interactive examination runner with immediate automated scoring, answer explanations, and pass/fail thresholds.
+- **MoES / IMD Verified Certificates:** Formal, verifiable digital certificates of competency.
+- **Course Feedback:** Transparent rating and operational feedback submission.
 
-### 1. Install Dependencies
+### 2. Trainer / Specialist Faculty
+- **Course Authoring Studio:** Structured multi-module course creator with syllabus, lecture videos, and technical attachments.
+- **Assessment Builder:** Create subject-wise MCQs, specify passing percentages, deadlines, point values, and scientific explanations.
+- **Trainee Performance Monitoring:** Live tracking of completion rates, examination marks, and exportable CSV reports.
+- **Trainer Library:** Centralized repository to upload manuals, presentations, scripts, radar datasets, and standards.
+
+### 3. Administrator / Directorate
+- **Directorate Dashboard:** High-level metrics for enrolled officers, active courses, pass rates, and certificates issued.
+- **User Verification & Role Management:** Approval workflows for newly registered faculty and trainees.
+- **Competency Mapping Engine:** Advanced search and compatibility scoring matching trainers' declared skills and experience with specialized meteorological domains (Doppler Radar, NWP Modeling, Cyclone Forecasting, Agro-meteorology).
+- **Ministry Broadcast Manager:** Real-time publication of national training workshops, policy updates, and bulletins.
+
+---
+
+## 🔑 Demo Logins (Instant Hackathon Access)
+
+| Role | Name | Email | Password |
+|---|---|---|---|
+| **Admin** | Dr. M. Mohapatra (DG IMD) | `admin@imd.gov.in` | `Password@123` |
+| **Trainer** | Dr. Sunitha Sharma (Radar Specialist) | `trainer@imd.gov.in` | `Password@123` |
+| **Trainee** | Amit Sengupta (Scientific Asst) | `trainee@imd.gov.in` | `Password@123` |
+
+*(The login screen also provides 1-click Quick Demo buttons for instant evaluation!)*
+
+---
+
+## 📁 Repository Structure
+
+```
+CAPACITY-CONNECT/
+│
+├── frontend/
+│   ├── public/
+│   ├── src/
+│   │   ├── assets/
+│   │   ├── components/
+│   │   │   ├── Navbar.jsx
+│   │   │   ├── Sidebar.jsx
+│   │   │   ├── StatCard.jsx
+│   │   │   ├── Modal.jsx
+│   │   │   └── CertificateModal.jsx
+│   │   ├── pages/
+│   │   │   ├── auth/
+│   │   │   │   ├── Login.jsx
+│   │   │   │   └── Signup.jsx
+│   │   │   ├── trainee/
+│   │   │   │   ├── TraineeDashboard.jsx
+│   │   │   │   ├── MyCourses.jsx
+│   │   │   │   ├── CourseDetails.jsx
+│   │   │   │   ├── CourseCatalog.jsx
+│   │   │   │   ├── Assessment.jsx
+│   │   │   │   └── Profile.jsx
+│   │   │   ├── trainer/
+│   │   │   │   ├── TrainerDashboard.jsx
+│   │   │   │   ├── CreateCourse.jsx
+│   │   │   │   ├── ManageCourses.jsx
+│   │   │   │   ├── CreateAssessment.jsx
+│   │   │   │   └── TraineeProgress.jsx
+│   │   │   └── admin/
+│   │   │       ├── AdminDashboard.jsx
+│   │   │       ├── ManageUsers.jsx
+│   │   │       ├── ManageCourses.jsx
+│   │   │       └── Reports.jsx
+│   │   ├── layouts/
+│   │   │   └── DashboardLayout.jsx
+│   │   ├── routes/
+│   │   │   └── AppRoutes.jsx
+│   │   ├── services/
+│   │   │   └── api.js
+│   │   ├── context/
+│   │   │   └── AuthContext.jsx
+│   │   ├── hooks/
+│   │   │   └── useAuth.js
+│   │   ├── utils/
+│   │   │   └── formatters.js
+│   │   ├── App.jsx
+│   │   └── main.jsx
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── tailwind.config.js
+│   └── postcss.config.js
+│
+├── backend/
+│   ├── src/
+│   │   ├── config/
+│   │   │   └── db.js
+│   │   ├── controllers/
+│   │   │   ├── authController.js
+│   │   │   ├── courseController.js
+│   │   │   ├── assessmentController.js
+│   │   │   ├── trainerController.js
+│   │   │   └── adminController.js
+│   │   ├── models/
+│   │   │   ├── User.js
+│   │   │   ├── Course.js
+│   │   │   ├── Assessment.js
+│   │   │   ├── AssessmentSubmission.js
+│   │   │   ├── TrainerLibrary.js
+│   │   │   ├── Announcement.js
+│   │   │   └── Feedback.js
+│   │   ├── routes/
+│   │   │   ├── authRoutes.js
+│   │   │   ├── courseRoutes.js
+│   │   │   ├── assessmentRoutes.js
+│   │   │   ├── trainerRoutes.js
+│   │   │   └── adminRoutes.js
+│   │   ├── middleware/
+│   │   │   ├── authMiddleware.js
+│   │   │   └── errorMiddleware.js
+│   │   ├── services/
+│   │   │   └── dataService.js
+│   │   ├── utils/
+│   │   │   └── seedData.js
+│   │   └── server.js
+│   ├── .env
+│   └── package.json
+│
+├── README.md
+└── .gitignore
+```
+
+---
+
+## 🚀 Quick Start Guide
+
+### 1. Start the Backend API Server
 ```bash
-# In backend/
-cd backend
+cd CAPACITY-CONNECT/backend
 npm install
-
-# In frontend/
-cd ../frontend
-npm install
-```
-
-### 2. Run Automated Test Suite
-Verify backend authentication, RBAC security, YouTube URL parsing, server-side scoring, certificate verification, and Capacity Competency matching:
-```bash
-cd backend
-npm test
-```
-
-### 3. Start Backend API Server
-```bash
-cd backend
-npm start
-# Running at http://localhost:5000 (Health Check: http://localhost:5000/api/health)
-```
-
-### 4. Start Frontend Client
-```bash
-cd frontend
 npm run dev
-# Running at http://localhost:5173
 ```
+*Backend starts on `http://localhost:5000` with persistent file/memory database loaded with realistic MoES/IMD seed data.*
 
----
-
-## 🔑 Demo Accounts (Pre-seeded for Evaluation)
-
-| Role | Email | Password | Primary Functions |
-| :--- | :--- | :--- | :--- |
-| **Trainee** | `aarav.patel@trainee.in` | `Password@123` | Learn, Attempt Tests, Download Certificate with QR |
-| **Trainer** | `rajesh.sharma@capacityconnect.gov.in` | `Password@123` | Create Course with YouTube + Gemini AI, Build MCQs, View Analytics |
-| **Admin** | `admin@capacityconnect.gov.in` | `Password@123` | Capacity Competency Matcher, Approve Users, Publish Notices |
-
-> **Note**: The login screen also features **1-Click Quick Demo Login buttons** for immediate evaluator testing without typing.
-
----
-
-## 🗄️ Database Schema & Migrations
-
-The complete PostgreSQL database schema and initial seed data are located in:
-- `supabase/schema.sql`: 19 normalized relational tables, constraints, foreign keys, and indexes.
-- `supabase/seed.sql`: Realistic pre-seeded users, courses, materials, MCQs, and certificates.
-
----
-
-## 🔒 Security Principles
-
-1. **Deterministic Backend Operations**: All role permissions, assessment scoring, and certificate eligibility decisions are performed exclusively by server-side code.
-2. **Untrusted Client Role**: Roles are derived securely from authenticated server sessions; client-provided roles are never trusted.
-3. **Hidden Assessment Answers**: Correct MCQ options are stripped from trainee API responses until after final submission.
-4. **Deadline Enforcement**: Submissions past assessment deadlines are rejected server-side.
+### 2. Start the Frontend Application
+```bash
+cd CAPACITY-CONNECT/frontend
+npm install
+npm run dev
+```
+*Frontend runs on `http://localhost:5173` with an active proxy to `http://localhost:5000`.*

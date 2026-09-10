@@ -1,41 +1,90 @@
-import axios from 'axios';
+const BASE_URL = import.meta.env.VITE_API_URL || "/api";
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
-  headers: {
-    'Content-Type': 'application/json'
+export const apiRequest = async (endpoint, options = {}) => {
+  const token = localStorage.getItem("token");
+
+  const isFormData = options.body instanceof FormData;
+
+  const headers = {
+    ...(!isFormData && { "Content-Type": "application/json" }),
+    ...(token && { Authorization: `Bearer ${token}` }),
+    ...options.headers
+  };
+
+  const response = await fetch(`${BASE_URL}${endpoint}`, {
+    ...options,
+    headers
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const errorMsg = data.message || `Request failed with status ${response.status}`;
+    throw new Error(errorMsg);
   }
-});
 
-// Attach JWT token from localStorage to outgoing requests
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('cc_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+  return data;
+};
+
+export const api = {
+  // Auth
+  login: (credentials) => apiRequest("/auth/login", { method: "POST", body: JSON.stringify(credentials) }),
+  signup: (userData) => apiRequest("/auth/signup", { method: "POST", body: JSON.stringify(userData) }),
+  getProfile: () => apiRequest("/auth/me"),
+  updateProfile: (profileData) => apiRequest("/auth/profile", { method: "PUT", body: JSON.stringify(profileData) }),
+
+  // Courses
+  getCourses: (params = "") => apiRequest(`/courses${params ? `?${params}` : ""}`),
+  getCourseDetails: (id) => apiRequest(`/courses/${id}`),
+  enrollCourse: (id) => apiRequest(`/courses/${id}/enroll`, { method: "POST" }),
+  updateCourseProgress: (id, moduleId) => apiRequest(`/courses/${id}/progress`, { method: "POST", body: JSON.stringify({ moduleId }) }),
+  getMyCourses: () => apiRequest("/courses/my-courses"),
+  submitCourseFeedback: (id, feedback) => apiRequest(`/courses/${id}/feedback`, { method: "POST", body: JSON.stringify(feedback) }),
+
+  // Assessments
+  getAssessment: (id) => apiRequest(`/assessments/${id}`),
+  submitAssessment: (id, answers) => apiRequest(`/assessments/${id}/submit`, { method: "POST", body: JSON.stringify({ answers }) }),
+  getMySubmissions: () => apiRequest("/assessments/my-submissions"),
+  downloadCertificate: async (certificateId) => {
+    const token = localStorage.getItem("token");
+    const response = await fetch(`${BASE_URL}/certificates/${encodeURIComponent(certificateId)}/download`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.message || "Certificate download failed.");
     }
-    return config;
+    return response.blob();
   },
-  (error) => Promise.reject(error)
-);
 
-// Intercept 401 unauthorized to clear invalid sessions
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response && error.response.status === 401) {
-      // If token expired, clear localStorage and redirect to login if not already on public route
-      const isPublicPath = window.location.pathname.startsWith('/login') ||
-                           window.location.pathname.startsWith('/signup') ||
-                           window.location.pathname.startsWith('/verify') ||
-                           window.location.pathname === '/';
-      if (!isPublicPath) {
-        localStorage.removeItem('cc_token');
-        localStorage.removeItem('cc_user');
-      }
-    }
-    return Promise.reject(error);
-  }
-);
+  // Trainer
+  getTrainerCourses: () => apiRequest("/trainer/courses"),
+  createCourse: (course) => apiRequest("/trainer/courses", { method: "POST", body: JSON.stringify(course) }),
+  updateCourse: (id, course) => apiRequest(`/trainer/courses/${id}`, { method: "PUT", body: JSON.stringify(course) }),
+  getTrainerAssessments: () => apiRequest("/trainer/assessments"),
+  createAssessment: (assessment) => apiRequest("/trainer/assessments", { method: "POST", body: JSON.stringify(assessment) }),
+  getTraineeProgress: () => apiRequest("/trainer/trainee-progress"),
+  getLibrary: () => apiRequest("/trainer/library"),
+  uploadLibraryResource: (resource) => apiRequest("/trainer/library", { method: "POST", body: JSON.stringify(resource) }),
+  deleteLibraryResource: (id) => apiRequest(`/trainer/library/${id}`, { method: "DELETE" }),
 
-export default api;
+  // Upload
+  uploadFile: (formData) => apiRequest("/upload", { method: "POST", body: formData }),
+
+  // Progress & Trainee
+  getProgress: (courseId) => apiRequest(`/progress/${courseId}`),
+  updateProgress: (courseId, progressData) => apiRequest(`/progress/${courseId}`, { method: "PUT", body: JSON.stringify(progressData) }),
+  getEnrollments: () => apiRequest("/enrollments/my-courses"),
+  getTraineeDashboard: () => apiRequest("/trainee/dashboard"),
+
+  // Admin
+  getAdminStats: () => apiRequest("/admin/stats"),
+  getAdminUsers: (params = "") => apiRequest(`/admin/users${params ? `?${params}` : ""}`),
+  updateUserStatus: (id, updates) => apiRequest(`/admin/users/${id}/status`, { method: "PUT", body: JSON.stringify(updates) }),
+  deleteUser: (id) => apiRequest(`/admin/users/${id}`, { method: "DELETE" }),
+  getCompetencyMapping: (subject = "") => apiRequest(`/admin/competency-mapping${subject ? `?subject=${encodeURIComponent(subject)}` : ""}`),
+  getAnnouncements: () => apiRequest("/announcements"),
+  createAnnouncement: (data) => apiRequest("/admin/announcements", { method: "POST", body: JSON.stringify(data) }),
+  deleteAnnouncement: (id) => apiRequest(`/admin/announcements/${id}`, { method: "DELETE" }),
+  getReports: () => apiRequest("/admin/reports")
+};

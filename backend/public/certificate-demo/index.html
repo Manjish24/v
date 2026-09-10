@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Certificate Download Test</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #edf5f8; color: #17324d; font-family: Arial, sans-serif; }
+      main { width: min(100%, 570px); padding: 34px; background: white; border-radius: 20px; box-shadow: 0 18px 45px rgba(11,79,108,.15); }
+      h1 { margin: 0 0 8px; font-size: 27px; color: #0b4f6c; }
+      p { color: #526579; line-height: 1.5; }
+      label { display: block; margin-top: 18px; font-size: 14px; font-weight: bold; }
+      input { width: 100%; margin-top: 7px; padding: 12px; border: 1px solid #b7c7d2; border-radius: 9px; font: inherit; }
+      button { margin-top: 22px; padding: 12px 16px; border: 0; border-radius: 9px; background: #0b4f6c; color: white; font-weight: bold; cursor: pointer; }
+      button:hover { background: #073c53; }
+      button:disabled { opacity: .6; cursor: wait; }
+      #result { display: none; margin-top: 24px; padding: 18px; background: #edf9f3; border: 1px solid #9bd7b7; border-radius: 10px; }
+      #result a { color: #086f40; font-weight: bold; word-break: break-all; }
+      .error { color: #b42318; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Certificate Download Test</h1>
+      <p>Create a temporary certificate with any student and course. The downloaded PDF includes a QR code that verifies its validity.</p>
+      <form id="certificate-form">
+        <label for="student">Student name</label>
+        <input id="student" required value="Amit Sengupta" />
+        <label for="course">Completed course</label>
+        <input id="course" required value="Tropical Cyclone Early Warning Systems" />
+        <button id="create" type="submit">Create and Download Certificate</button>
+      </form>
+      <section id="result"></section>
+    </main>
+    <script>
+      const form = document.querySelector('#certificate-form');
+      const button = document.querySelector('#create');
+      const result = document.querySelector('#result');
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        button.disabled = true;
+        button.textContent = 'Creating PDF...';
+        result.style.display = 'none';
+        try {
+          const response = await fetch('/api/demo-certificates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ recipientName: document.querySelector('#student').value, courseTitle: document.querySelector('#course').value })
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.message || 'Could not create certificate.');
+          const downloadUrl = `/api/demo-certificates/${data.certificate.certificateId}/download`;
+          const link = document.createElement('a');
+          link.href = downloadUrl;
+          link.download = `${data.certificate.certificateId}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          result.innerHTML = `<strong>Certificate created.</strong><br><br>Verification link:<br><a href="${data.verificationUrl}" target="_blank" rel="noopener">${data.verificationUrl}</a>`;
+        } catch (error) {
+          result.innerHTML = `<span class="error">${error.message}</span>`;
+        } finally {
+          result.style.display = 'block';
+          button.disabled = false;
+          button.textContent = 'Create and Download Certificate';
+        }
+      });
+    </script>
+  </body>
+</html>

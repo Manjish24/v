@@ -1,173 +1,207 @@
-import { v4 as uuidv4 } from 'uuid';
-import { memoryStore } from '../config/db.js';
+import { v4 as uuidv4 } from "uuid";
+import { dataService } from "../services/dataService.js";
+import { validateFeedback } from "../models/Feedback.js";
 
-export function getAllCourses(req, res) {
+export const getAllCourses = async (req, res) => {
   try {
-    const { search, subject, difficulty, status } = req.query;
+    const { category, search, level } = req.query;
+    let courses = await dataService.getCourses();
 
-    let courses = [...memoryStore.courses];
-
-    // Guests / Trainees only see PUBLISHED courses by default
-    if (!status) {
-      courses = courses.filter(c => c.status === 'PUBLISHED');
-    } else if (status !== 'ALL') {
-      courses = courses.filter(c => c.status === status);
+    if (category && category !== "All") {
+      courses = courses.filter((c) => c.category.toLowerCase() === category.toLowerCase());
     }
-
+    if (level && level !== "All") {
+      courses = courses.filter((c) => c.level.toLowerCase() === level.toLowerCase());
+    }
     if (search) {
       const q = search.toLowerCase();
-      courses = courses.filter(c =>
+      courses = courses.filter((c) =>
         c.title.toLowerCase().includes(q) ||
         c.description.toLowerCase().includes(q) ||
-        c.subject.toLowerCase().includes(q)
+        c.trainerName.toLowerCase().includes(q)
       );
     }
 
-    if (subject && subject !== 'All') {
-      courses = courses.filter(c => c.subject.toLowerCase() === subject.toLowerCase());
-    }
-
-    if (difficulty && difficulty !== 'All') {
-      courses = courses.filter(c => c.difficulty.toLowerCase() === difficulty.toLowerCase());
-    }
-
-    // Attach trainer info and enrollment count
-    const enriched = courses.map(course => {
-      const trainer = memoryStore.users.find(u => u.id === course.trainer_id);
-      const enrollmentsCount = memoryStore.enrollments.filter(e => e.course_id === course.id).length;
-      const feedbackList = memoryStore.feedback.filter(f => f.course_id === course.id);
-      const avgRating = feedbackList.length > 0
-        ? (feedbackList.reduce((acc, f) => acc + f.rating, 0) / feedbackList.length).toFixed(1)
-        : null;
-
-      return {
-        ...course,
-        trainer_name: trainer ? trainer.name : (course.trainer_name || 'Expert Trainer'),
-        trainer_avatar: trainer ? trainer.avatar_url : null,
-        enrollment_count: enrollmentsCount,
-        average_rating: avgRating ? parseFloat(avgRating) : 5.0,
-        ratings_count: feedbackList.length
-      };
-    });
-
-    return res.json({
-      success: true,
-      count: enriched.length,
-      data: enriched
-    });
+    res.status(200).json({ success: true, count: courses.length, courses });
   } catch (error) {
-    console.error('getAllCourses error:', error);
-    res.status(500).json({ success: false, message: 'Server error retrieving courses.' });
+    res.status(500).json({ success: false, message: "Failed to fetch courses.", error: error.message });
   }
-}
+};
 
-export function getCourseById(req, res) {
+export const getCourseDetails = async (req, res) => {
   try {
     const { id } = req.params;
-    const course = memoryStore.courses.find(c => c.id === id);
-
+    const course = await dataService.getCourseById(id);
     if (!course) {
-      return res.status(404).json({ success: false, message: 'Course not found.' });
+      return res.status(404).json({ success: false, message: "Course not found." });
     }
 
-    const trainer = memoryStore.users.find(u => u.id === course.trainer_id);
-    const trainerProfile = trainer ? memoryStore.trainerProfiles.find(p => p.user_id === trainer.id) : null;
-    const materials = memoryStore.materials.filter(m => m.course_id === course.id).sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
-    const assessments = memoryStore.assessments.filter(a => a.course_id === course.id);
-    const feedbackList = memoryStore.feedback.filter(f => f.course_id === course.id);
+    // Check enrollment if user is authenticated
+    let enrollment = null;
+    if (req.user) {
+      enrollment = await dataService.getEnrollment(req.user.id, id);
+    }
 
-    return res.json({
+    // Get assessments linked to course
+    const assessments = await dataService.getAssessmentsByCourse(id);
+    // Get feedbacks
+    const feedbacks = await dataService.getFeedbacksByCourse(id);
+
+    res.status(200).json({
       success: true,
-      data: {
-        ...course,
-        trainer: {
-          id: trainer?.id,
-          name: trainer?.name,
-          avatar_url: trainer?.avatar_url,
-          bio: trainer?.bio,
-          qualification: trainerProfile?.qualification,
-          work_experience: trainerProfile?.work_experience
-        },
-        materials,
-        assessments: assessments.map(a => ({
-          id: a.id,
-          title: a.title,
-          description: a.description,
-          deadline: a.deadline,
-          duration_minutes: a.duration_minutes,
-          total_marks: a.total_marks
-        })),
-        feedback: feedbackList
-      }
+      course,
+      enrollment,
+      assessments: assessments.map((a) => ({
+        id: a.id,
+        title: a.title,
+        durationMinutes: a.durationMinutes,
+        deadline: a.deadline,
+        passingPercentage: a.passingPercentage,
+        questionsCount: a.questions ? a.questions.length : 0,
+        totalMarks: a.totalMarks
+      })),
+      feedbacks
     });
   } catch (error) {
-    console.error('getCourseById error:', error);
-    res.status(500).json({ success: false, message: 'Server error retrieving course details.' });
+    res.status(500).json({ success: false, message: "Failed to fetch course details.", error: error.message });
   }
-}
+};
 
-export function submitCourseFeedback(req, res) {
+export const enrollInCourse = async (req, res) => {
   try {
-    const { id: courseId } = req.params;
-    const traineeId = req.user.id;
-    const { rating, comment, academic_relevance, suggestions } = req.body;
+    const { id } = req.params;
+    const userId = req.user.id;
 
-    if (!rating || !comment) {
-      return res.status(400).json({
-        success: false,
-        message: 'Rating and comment are required.'
-      });
+    const course = await dataService.getCourseById(id);
+    if (!course) {
+      return res.status(404).json({ success: false, message: "Course not found." });
     }
 
-    // Business Rule (Section 19): Verify course completion before allowing feedback
-    const enrollment = memoryStore.enrollments.find(e =>
-      e.course_id === courseId && e.trainee_id === traineeId
-    );
-
-    if (!enrollment || enrollment.status !== 'COMPLETED') {
-      return res.status(403).json({
-        success: false,
-        message: 'Course feedback can only be submitted after verified course completion.'
-      });
+    const existingEnrollment = await dataService.getEnrollment(userId, id);
+    if (existingEnrollment) {
+      return res.status(400).json({ success: false, message: "You are already enrolled in this course." });
     }
 
-    const existingFeedback = memoryStore.feedback.find(f =>
-      f.course_id === courseId && f.trainee_id === traineeId
-    );
+    const newEnrollment = {
+      id: `enr-${uuidv4().substring(0, 8)}`,
+      userId,
+      courseId: id,
+      enrolledAt: new Date().toISOString(),
+      completedModules: [],
+      progressPercentage: 0,
+      status: "in-progress"
+    };
 
-    if (existingFeedback) {
-      existingFeedback.rating = Number(rating);
-      existingFeedback.comment = comment;
-      existingFeedback.academic_relevance = academic_relevance ? Number(academic_relevance) : 5;
-      existingFeedback.suggestions = suggestions || '';
-      return res.json({
-        success: true,
-        message: 'Feedback updated successfully.',
-        data: existingFeedback
-      });
+    await dataService.createEnrollment(newEnrollment);
+
+    res.status(201).json({
+      success: true,
+      message: `Enrolled successfully in ${course.title}!`,
+      enrollment: newEnrollment
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Enrollment failed.", error: error.message });
+  }
+};
+
+export const updateModuleProgress = async (req, res) => {
+  try {
+    const { id } = req.params; // courseId
+    const { moduleId } = req.body;
+    const userId = req.user.id;
+
+    const course = await dataService.getCourseById(id);
+    if (!course) {
+      return res.status(404).json({ success: false, message: "Course not found." });
+    }
+
+    const enrollment = await dataService.getEnrollment(userId, id);
+    if (!enrollment) {
+      return res.status(404).json({ success: false, message: "You are not enrolled in this course." });
+    }
+
+    let completedModules = enrollment.completedModules || [];
+    if (!completedModules.includes(moduleId)) {
+      completedModules.push(moduleId);
+    }
+
+    const totalModules = (course.modules && course.modules.length) || 1;
+    const progressPercentage = Math.min(100, Math.round((completedModules.length / totalModules) * 100));
+    const status = progressPercentage === 100 ? "completed" : "in-progress";
+
+    const updated = await dataService.updateEnrollment(enrollment.id, {
+      completedModules,
+      progressPercentage,
+      status
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Progress updated successfully.",
+      enrollment: updated
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to update progress.", error: error.message });
+  }
+};
+
+export const getMyCourses = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const enrollments = await dataService.getEnrollmentsByUser(userId);
+    const allCourses = await dataService.getCourses();
+    const allAssessments = await dataService.getAssessments();
+
+    const myCourses = enrollments.map((enr) => {
+      const course = allCourses.find((c) => c.id === enr.courseId);
+      return {
+        ...course,
+        enrollment: enr,
+        assessmentId: allAssessments.find((assessment) => assessment.courseId === enr.courseId)?.id || null
+      };
+    }).filter((c) => c.id);
+
+    res.status(200).json({ success: true, courses: myCourses });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to retrieve enrolled courses.", error: error.message });
+  }
+};
+
+export const addCourseFeedback = async (req, res) => {
+  try {
+    const { id } = req.params; // courseId
+    const { rating, comment } = req.body;
+    const userId = req.user.id;
+    const userName = req.user.name;
+
+    const validation = validateFeedback({ courseId: id, rating, comment });
+    if (!validation.isValid) {
+      return res.status(400).json({ success: false, message: validation.errors.join(", ") });
     }
 
     const newFeedback = {
-      id: uuidv4(),
-      course_id: courseId,
-      trainee_id: traineeId,
-      trainee_name: req.user.name,
+      id: `fb-${uuidv4().substring(0, 8)}`,
+      courseId: id,
+      userId,
+      userName,
       rating: Number(rating),
       comment,
-      academic_relevance: academic_relevance ? Number(academic_relevance) : 5,
-      suggestions: suggestions || '',
-      created_at: new Date().toISOString()
+      createdAt: new Date().toISOString()
     };
 
-    memoryStore.feedback.push(newFeedback);
+    await dataService.createFeedback(newFeedback);
 
-    return res.status(201).json({
+    // recalculate course average rating
+    const allFeedbacks = await dataService.getFeedbacksByCourse(id);
+    const avgRating = (allFeedbacks.reduce((sum, f) => sum + f.rating, 0) / allFeedbacks.length).toFixed(1);
+    await dataService.updateCourse(id, { rating: parseFloat(avgRating) });
+
+    res.status(201).json({
       success: true,
-      message: 'Thank you for your valuable feedback!',
-      data: newFeedback
+      message: "Thank you for your valuable feedback!",
+      feedback: newFeedback
     });
   } catch (error) {
-    console.error('submitCourseFeedback error:', error);
-    res.status(500).json({ success: false, message: 'Server error submitting feedback.' });
+    res.status(500).json({ success: false, message: "Failed to submit feedback.", error: error.message });
   }
-}
+};
