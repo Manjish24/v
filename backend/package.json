@@ -1,0 +1,32 @@
+{
+  "name": "capacity-connect-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Backend API for Capacity Connect - SIH PS 26075",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node test/api.test.js"
+  },
+  "keywords": [
+    "sih",
+    "capacity-connect",
+    "lms",
+    "express",
+    "supabase",
+    "gemini"
+  ],
+  "author": "Capacity Connect Team",
+  "license": "MIT",
+  "dependencies": {
+    "@google/genai": "^2.21.0",
+    "@supabase/supabase-js": "^2.49.1",
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "uuid": "^11.1.0"
+  }
+}
