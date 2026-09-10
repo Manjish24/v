@@ -1,235 +1,178 @@
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
-import { v4 as uuidv4 } from 'uuid';
-import { memoryStore } from '../config/db.js';
+import bcrypt from "bcryptjs";
+import { v4 as uuidv4 } from "uuid";
+import { dataService } from "../services/dataService.js";
+import { validateUser } from "../models/User.js";
+import { generateToken } from "../utils/generateToken.js";
+import { validateSignupInput } from "../utils/validators.js";
+import { emailService } from "../services/emailService.js";
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secure-capacity-connect-secret-jwt-key-2026';
-
-export async function register(req, res) {
+export const register = async (req, res) => {
   try {
-    const { name, email, password, confirmPassword, role } = req.body;
-
-    if (!name || !email || !password || !role) {
-      return res.status(400).json({
-        success: false,
-        message: 'Name, email, password, and role are required.'
-      });
-    }
-
-    if (confirmPassword && password !== confirmPassword) {
-      return res.status(400).json({
-        success: false,
-        message: 'Passwords do not match.'
-      });
-    }
-
-    // Security Rule (Section 7): ADMIN cannot be registered publicly
-    if (role !== 'TRAINEE' && role !== 'TRAINER') {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid role. Only TRAINEE or TRAINER registration is allowed.'
-      });
-    }
-
-    // Check if email already exists
-    const existing = memoryStore.users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (existing) {
-      return res.status(400).json({
-        success: false,
-        message: 'An account with this email address already exists.'
-      });
-    }
-
-    const salt = bcrypt.genSaltSync(10);
-    const passwordHash = bcrypt.hashSync(password, salt);
-    const userId = uuidv4();
-    const profileId = uuidv4();
-
-    // Default status: APPROVED (can be PENDING if admin review is toggled)
-    const newUser = {
-      id: userId,
+    const {
       name,
-      email: email.toLowerCase(),
-      password_hash: passwordHash,
-      role,
-      status: 'APPROVED',
-      avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
-      bio: '',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      email,
+      password,
+      role = "trainee",
+      adminSecretKey = "",
+      organization = "India Meteorological Department (IMD)",
+      department = "",
+      designation = "",
+      phone = "",
+      qualifications = "",
+      experience = "",
+      skills = [],
+      interests = []
+    } = req.body;
+
+    const inputValidation = validateSignupInput({ name, email, password, role });
+    if (!inputValidation.isValid) {
+      return res.status(400).json({ success: false, message: inputValidation.errors.join(", ") });
+    }
+
+    // Prevent unauthorized creation of admin accounts
+    let assignedRole = role;
+    if (role === "admin") {
+      const validAdminKey = process.env.ADMIN_SECRET_KEY || "moes_admin_secret_2026";
+      if (adminSecretKey !== validAdminKey) {
+        return res.status(403).json({
+          success: false,
+          message: "Forbidden: Administrative role registration requires valid MoES authorization key."
+        });
+      }
+    }
+
+    const existingUser = await dataService.getUserByEmail(email);
+    if (existingUser) {
+      return res.status(409).json({ success: false, message: "A user with this official email already exists." });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const status = assignedRole === "trainer" ? "pending" : "approved";
+
+    const newUser = {
+      id: `usr-${uuidv4().substring(0, 8)}`,
+      name,
+      email,
+      password: hashedPassword,
+      role: assignedRole,
+      status,
+      organization,
+      department,
+      designation,
+      phone,
+      qualifications,
+      experience,
+      skills: Array.isArray(skills) ? skills : typeof skills === "string" ? skills.split(",").map((s) => s.trim()) : [],
+      interests: Array.isArray(interests) ? interests : typeof interests === "string" ? interests.split(",").map((i) => i.trim()) : [],
+      certificates: [],
+      createdAt: new Date().toISOString()
     };
 
-    memoryStore.users.push(newUser);
+    await dataService.createUser(newUser);
+    await emailService.sendWelcomeEmail(newUser);
 
-    if (role === 'TRAINEE') {
-      memoryStore.traineeProfiles.push({
-        id: profileId,
-        user_id: userId,
-        qualification: '',
-        work_experience: '',
-        interests: [],
-        bio: '',
-        skills: [],
-        created_at: new Date().toISOString()
-      });
-    } else if (role === 'TRAINER') {
-      memoryStore.trainerProfiles.push({
-        id: profileId,
-        user_id: userId,
-        qualification: '',
-        work_experience: '',
-        bio: '',
-        skills: [],
-        competencies: [],
-        created_at: new Date().toISOString()
-      });
-    }
+    const token = generateToken(newUser);
+    const { password: _, ...userSafe } = newUser;
 
-    const token = jwt.sign(
-      { userId: newUser.id, role: newUser.role, email: newUser.email },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    return res.status(201).json({
+    res.status(201).json({
       success: true,
-      message: 'Account registered successfully.',
-      data: {
-        token,
-        user: {
-          id: newUser.id,
-          name: newUser.name,
-          email: newUser.email,
-          role: newUser.role,
-          status: newUser.status,
-          avatar_url: newUser.avatar_url
-        }
-      }
+      message: status === "pending"
+        ? "Trainer registration submitted! Your account is awaiting IMD administrator approval."
+        : "Registration successful!",
+      token,
+      user: userSafe
     });
   } catch (error) {
-    console.error('Register error:', error);
-    res.status(500).json({ success: false, message: 'Server error during registration.' });
+    console.error("Registration error:", error);
+    res.status(500).json({ success: false, message: "Server error during registration.", error: error.message });
   }
-}
+};
 
-export async function login(req, res) {
+export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-
     if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email and password are required.'
-      });
+      return res.status(400).json({ success: false, message: "Email and password are required." });
     }
 
-    const user = memoryStore.users.find(u => u.email.toLowerCase() === email.toLowerCase());
-
+    const user = await dataService.getUserByEmail(email);
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid email or password.'
-      });
+      return res.status(401).json({ success: false, message: "Invalid email or credentials." });
     }
 
-    // Compare password
-    const isMatch = bcrypt.compareSync(password, user.password_hash) || password === 'Password@123';
-
+    const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid email or password.'
-      });
+      return res.status(401).json({ success: false, message: "Invalid email or credentials." });
     }
 
-    if (user.status === 'SUSPENDED') {
-      return res.status(403).json({
-        success: false,
-        message: 'Your account has been suspended by an administrator.'
-      });
-    }
+    const token = generateToken(user);
+    const { password: _, ...userSafe } = user;
 
-    if (user.status === 'REJECTED') {
-      return res.status(403).json({
-        success: false,
-        message: 'Your account application was rejected.'
-      });
-    }
-
-    const token = jwt.sign(
-      { userId: user.id, role: user.role, email: user.email },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    let profile = null;
-    if (user.role === 'TRAINEE') {
-      profile = memoryStore.traineeProfiles.find(p => p.user_id === user.id);
-    } else if (user.role === 'TRAINER') {
-      profile = memoryStore.trainerProfiles.find(p => p.user_id === user.id);
-    }
-
-    return res.json({
+    res.status(200).json({
       success: true,
-      message: 'Login successful.',
-      data: {
-        token,
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          status: user.status,
-          avatar_url: user.avatar_url,
-          bio: user.bio
-        },
-        profile
-      }
+      message: `Welcome back, ${user.name}!`,
+      token,
+      user: userSafe
     });
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ success: false, message: 'Server error during login.' });
+    console.error("Login error:", error);
+    res.status(500).json({ success: false, message: "Server error during login.", error: error.message });
   }
-}
+};
 
-export async function getMe(req, res) {
+export const getMe = async (req, res) => {
   try {
-    const user = memoryStore.users.find(u => u.id === req.user.id);
+    const user = await dataService.getUserById(req.user.id);
     if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found.' });
+      return res.status(404).json({ success: false, message: "User not found." });
     }
+    const { password: _, ...userSafe } = user;
+    res.status(200).json({ success: true, user: userSafe });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to retrieve profile.", error: error.message });
+  }
+};
 
-    let profile = null;
-    if (user.role === 'TRAINEE') {
-      profile = memoryStore.traineeProfiles.find(p => p.user_id === user.id);
-    } else if (user.role === 'TRAINER') {
-      profile = memoryStore.trainerProfiles.find(p => p.user_id === user.id);
+export const updateProfile = async (req, res) => {
+  try {
+    const {
+      name,
+      organization,
+      department,
+      designation,
+      phone,
+      qualifications,
+      experience,
+      skills,
+      interests,
+      certificates
+    } = req.body;
+
+    const updates = {};
+    if (name) updates.name = name;
+    if (organization) updates.organization = organization;
+    if (department) updates.department = department;
+    if (designation) updates.designation = designation;
+    if (phone) updates.phone = phone;
+    if (qualifications) updates.qualifications = qualifications;
+    if (experience) updates.experience = experience;
+    if (skills !== undefined) {
+      updates.skills = Array.isArray(skills) ? skills : typeof skills === "string" ? skills.split(",").map((s) => s.trim()) : [];
     }
+    if (interests !== undefined) {
+      updates.interests = Array.isArray(interests) ? interests : typeof interests === "string" ? interests.split(",").map((i) => i.trim()) : [];
+    }
+    if (certificates !== undefined) updates.certificates = certificates;
 
-    return res.json({
+    const updatedUser = await dataService.updateUser(req.user.id, updates);
+    const { password: _, ...userSafe } = updatedUser;
+
+    res.status(200).json({
       success: true,
-      data: {
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          status: user.status,
-          avatar_url: user.avatar_url,
-          bio: user.bio
-        },
-        profile
-      }
+      message: "Profile updated successfully.",
+      user: userSafe
     });
   } catch (error) {
-    console.error('getMe error:', error);
-    res.status(500).json({ success: false, message: 'Server error retrieving current session.' });
+    res.status(500).json({ success: false, message: "Failed to update profile.", error: error.message });
   }
-}
-
-export function logout(req, res) {
-  return res.json({
-    success: true,
-    message: 'Logged out successfully.'
-  });
-}
+};

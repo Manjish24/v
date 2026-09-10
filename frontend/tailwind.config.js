@@ -2,26 +2,24 @@
 export default {
   content: [
     "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
+    "./src/**/*.{js,ts,jsx,tsx}"
   ],
   theme: {
     extend: {
       colors: {
-        brand: {
-          50: '#f0f7ff',
-          100: '#e0effe',
-          200: '#bae0fd',
-          300: '#7cc7fb',
-          400: '#36abf7',
-          500: '#0c8fe9',
-          600: '#0171c7',
-          700: '#025aa1',
-          800: '#064c85',
-          900: '#0b406e',
-          950: '#072849'
+        imd: {
+          dark: "#0a192f",
+          navy: "#0f294a",
+          blue: "#1e3a8a",
+          teal: "#0284c7",
+          cyan: "#06b6d4",
+          amber: "#f59e0b",
+          gold: "#d97706",
+          light: "#f8fafc",
+          surface: "#f1f5f9"
         }
       }
-    },
+    }
   },
-  plugins: [],
-}
+  plugins: []
+};

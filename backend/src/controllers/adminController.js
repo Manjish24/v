@@ -1,368 +1,272 @@
-import { v4 as uuidv4 } from 'uuid';
-import { memoryStore } from '../config/db.js';
+import { v4 as uuidv4 } from "uuid";
+import { dataService } from "../services/dataService.js";
 
-export function getPlatformStatistics(req, res) {
+export const getDashboardStats = async (req, res) => {
   try {
-    const traineesCount = memoryStore.users.filter(u => u.role === 'TRAINEE').length;
-    const trainersCount = memoryStore.users.filter(u => u.role === 'TRAINER').length;
-    const coursesCount = memoryStore.courses.length;
-    const publishedCoursesCount = memoryStore.courses.filter(c => c.status === 'PUBLISHED').length;
-    const enrollmentsCount = memoryStore.enrollments.length;
-    const completedCertificationsCount = memoryStore.certificates.length;
-    const assessmentsCount = memoryStore.assessments.length;
-    const totalResults = memoryStore.assessmentResults;
+    const users = await dataService.getUsers();
+    const courses = await dataService.getCourses();
+    const enrollments = await dataService.getEnrollments();
+    const submissions = await dataService.getSubmissions();
+    const announcements = await dataService.getAnnouncements();
 
-    const avgAssessmentScore = totalResults.length > 0
-      ? Math.round(totalResults.reduce((acc, r) => acc + r.percentage, 0) / totalResults.length)
-      : 84;
+    const trainees = users.filter((u) => u.role === "trainee");
+    const trainers = users.filter((u) => u.role === "trainer");
+    const pendingUsers = users.filter((u) => u.status === "pending");
 
-    const completedEnrollments = memoryStore.enrollments.filter(e => e.status === 'COMPLETED' || e.completion_percentage >= 100).length;
-    const completionRate = enrollmentsCount > 0
-      ? Math.round((completedEnrollments / enrollmentsCount) * 100)
-      : 78;
+    const completedEnrollments = enrollments.filter((e) => e.status === "completed");
+    const completionRate = enrollments.length > 0
+      ? Math.round((completedEnrollments.length / enrollments.length) * 100)
+      : 0;
 
-    // Monthly enrollment trends (mocked timeline from actual data)
-    const enrollmentTrends = [
-      { month: 'Jan', enrollments: 24, completions: 18 },
-      { month: 'Feb', enrollments: 38, completions: 26 },
-      { month: 'Mar', enrollments: 45, completions: 34 },
-      { month: 'Apr', enrollments: 52, completions: 40 },
-      { month: 'May', enrollments: 68, completions: 51 },
-      { month: 'Jun', enrollments: 84, completions: 64 },
-      { month: 'Jul', enrollments: 95, completions: 72 }
-    ];
+    const totalCertificatesIssued = submissions.filter((s) => s.passed).length;
+    const avgQuizScore = submissions.length > 0
+      ? Math.round(submissions.reduce((sum, s) => sum + s.percentage, 0) / submissions.length)
+      : 0;
 
-    // Subject breakdown
-    const subjectBreakdown = [
-      { subject: 'Machine Learning', count: memoryStore.courses.filter(c => c.subject === 'Machine Learning').length || 1 },
-      { subject: 'Web Development', count: memoryStore.courses.filter(c => c.subject === 'Web Development').length || 1 },
-      { subject: 'Cloud Computing', count: memoryStore.courses.filter(c => c.subject === 'Cloud Computing').length || 1 },
-      { subject: 'Data Science', count: 1 },
-      { subject: 'Cybersecurity', count: 1 }
-    ];
-
-    return res.json({
+    res.status(200).json({
       success: true,
-      data: {
-        totals: {
-          trainees: traineesCount,
-          trainers: trainersCount,
-          courses: coursesCount,
-          published_courses: publishedCoursesCount,
-          enrollments: enrollmentsCount,
-          certifications: completedCertificationsCount,
-          assessments: assessmentsCount,
-          average_score: avgAssessmentScore,
-          completion_rate: completionRate
-        },
-        enrollment_trends: enrollmentTrends,
-        subject_breakdown: subjectBreakdown,
-        recent_queries_count: memoryStore.queries.filter(q => q.status === 'OPEN').length,
-        pending_users_count: memoryStore.users.filter(u => u.status === 'PENDING').length
-      }
+      stats: {
+        totalUsers: users.length,
+        totalTrainees: trainees.length,
+        totalTrainers: trainers.length,
+        pendingApprovals: pendingUsers.length,
+        totalCourses: courses.length,
+        totalEnrollments: enrollments.length,
+        completedEnrollments: completedEnrollments.length,
+        completionRate,
+        totalCertificatesIssued,
+        avgQuizScore,
+        activeAnnouncements: announcements.length
+      },
+      recentUsers: users.slice(-5).reverse().map((u) => {
+        const { password, ...safe } = u;
+        return safe;
+      }),
+      recentEnrollments: enrollments.slice(-5).reverse()
     });
   } catch (error) {
-    console.error('getPlatformStatistics error:', error);
-    res.status(500).json({ success: false, message: 'Server error calculating statistics.' });
+    res.status(500).json({ success: false, message: "Failed to load dashboard stats.", error: error.message });
   }
-}
+};
 
-export function getUsers(req, res) {
+export const getUsers = async (req, res) => {
   try {
-    const { role, status, search, page = 1, limit = 20 } = req.query;
+    const { role, status, search } = req.query;
+    let users = await dataService.getUsers();
 
-    let users = [...memoryStore.users];
-
-    if (role && role !== 'ALL') {
-      users = users.filter(u => u.role === role);
+    if (role && role !== "all") {
+      users = users.filter((u) => u.role === role);
     }
-
-    if (status && status !== 'ALL') {
-      users = users.filter(u => u.status === status);
+    if (status && status !== "all") {
+      users = users.filter((u) => u.status === status);
     }
-
     if (search) {
       const q = search.toLowerCase();
-      users = users.filter(u => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q));
+      users = users.filter((u) =>
+        u.name.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
+        (u.organization && u.organization.toLowerCase().includes(q)) ||
+        (u.department && u.department.toLowerCase().includes(q))
+      );
     }
 
-    const total = users.length;
-    const startIndex = (Number(page) - 1) * Number(limit);
-    const paginated = users.slice(startIndex, startIndex + Number(limit));
-
-    const enriched = paginated.map(u => ({
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      role: u.role,
-      status: u.status,
-      avatar_url: u.avatar_url,
-      created_at: u.created_at
-    }));
-
-    return res.json({
-      success: true,
-      total,
-      page: Number(page),
-      limit: Number(limit),
-      data: enriched
+    const safeUsers = users.map((u) => {
+      const { password, ...safe } = u;
+      return safe;
     });
-  } catch (error) {
-    console.error('getUsers error:', error);
-    res.status(500).json({ success: false, message: 'Server error retrieving users.' });
-  }
-}
 
-export function updateUserStatus(req, res) {
+    res.status(200).json({ success: true, count: safeUsers.length, users: safeUsers });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to fetch users.", error: error.message });
+  }
+};
+
+export const updateUserStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, role } = req.body;
 
-    if (!['PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED'].includes(status)) {
-      return res.status(400).json({ success: false, message: 'Invalid status value.' });
-    }
-
-    const user = memoryStore.users.find(u => u.id === id);
+    const user = await dataService.getUserById(id);
     if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found.' });
+      return res.status(404).json({ success: false, message: "User not found." });
     }
 
-    user.status = status;
-    user.updated_at = new Date().toISOString();
+    const updates = {};
+    if (status) updates.status = status;
+    if (role) updates.role = role;
 
-    return res.json({
+    const updated = await dataService.updateUser(id, updates);
+    const { password, ...safe } = updated;
+
+    res.status(200).json({
       success: true,
-      message: `User status changed to ${status}.`,
-      data: { id: user.id, name: user.name, role: user.role, status: user.status }
+      message: `User ${safe.name} status updated to '${safe.status}' (Role: ${safe.role}).`,
+      user: safe
     });
   } catch (error) {
-    console.error('updateUserStatus error:', error);
-    res.status(500).json({ success: false, message: 'Server error updating user status.' });
+    res.status(500).json({ success: false, message: "Failed to update user status.", error: error.message });
   }
-}
+};
 
-export function updateUserRole(req, res) {
+export const deleteUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { role } = req.body;
-
-    if (!['TRAINEE', 'TRAINER', 'ADMIN'].includes(role)) {
-      return res.status(400).json({ success: false, message: 'Invalid role.' });
+    if (id === req.user.id) {
+      return res.status(400).json({ success: false, message: "You cannot delete your own administrative account." });
     }
-
-    const user = memoryStore.users.find(u => u.id === id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found.' });
-    }
-
-    user.role = role;
-    user.updated_at = new Date().toISOString();
-
-    return res.json({
-      success: true,
-      message: `User role changed to ${role}.`,
-      data: { id: user.id, name: user.name, role: user.role }
-    });
+    await dataService.deleteUser(id);
+    res.status(200).json({ success: true, message: "User deleted successfully." });
   } catch (error) {
-    console.error('updateUserRole error:', error);
-    res.status(500).json({ success: false, message: 'Server error updating role.' });
+    res.status(500).json({ success: false, message: "Failed to delete user.", error: error.message });
   }
-}
+};
 
-export function getAdminTrainees(req, res) {
+// Competency Mapping Engine for MoES / IMD
+export const getCompetencyMapping = async (req, res) => {
   try {
-    const trainees = memoryStore.users.filter(u => u.role === 'TRAINEE');
-    const enriched = trainees.map(t => {
-      const profile = memoryStore.traineeProfiles.find(p => p.user_id === t.id) || {};
-      const enrollments = memoryStore.enrollments.filter(e => e.trainee_id === t.id);
-      const certificates = memoryStore.certificates.filter(c => c.trainee_id === t.id);
+    const { subject, minExperience } = req.query;
+    const users = await dataService.getUsers();
+    const trainers = users.filter((u) => u.role === "trainer" && u.status === "approved");
+    const courses = await dataService.getCourses();
 
-      return {
-        id: t.id,
-        name: t.name,
-        email: t.email,
-        status: t.status,
-        avatar_url: t.avatar_url,
-        qualification: profile.qualification || 'Not specified',
-        work_experience: profile.work_experience || 'Fresher',
-        skills: profile.skills || [],
-        interests: profile.interests || [],
-        enrolled_courses_count: enrollments.length,
-        completed_courses_count: enrollments.filter(e => e.status === 'COMPLETED').length,
-        certificates_count: certificates.length,
-        created_at: t.created_at
-      };
-    });
+    const mappedTrainers = trainers.map((tr) => {
+      const trainerCourses = courses.filter((c) => c.trainerId === tr.id);
+      const avgCourseRating = trainerCourses.length > 0
+        ? (trainerCourses.reduce((sum, c) => sum + (c.rating || 4.5), 0) / trainerCourses.length).toFixed(1)
+        : "4.8";
 
-    return res.json({ success: true, data: enriched });
-  } catch (error) {
-    console.error('getAdminTrainees error:', error);
-    res.status(500).json({ success: false, message: 'Server error retrieving trainees.' });
-  }
-}
+      // Calculate matching score if subject search is present
+      let matchScore = 75; // baseline qualified score
+      if (subject) {
+        const subLower = subject.toLowerCase();
+        const skillsString = (tr.skills || []).join(" ").toLowerCase();
+        const qualString = (tr.qualifications || "").toLowerCase();
+        const expString = (tr.experience || "").toLowerCase();
 
-export function getAdminTrainers(req, res) {
-  try {
-    const trainers = memoryStore.users.filter(u => u.role === 'TRAINER');
-    const enriched = trainers.map(t => {
-      const profile = memoryStore.trainerProfiles.find(p => p.user_id === t.id) || {};
-      const courses = memoryStore.courses.filter(c => c.trainer_id === t.id);
-
-      return {
-        id: t.id,
-        name: t.name,
-        email: t.email,
-        status: t.status,
-        avatar_url: t.avatar_url,
-        qualification: profile.qualification || 'Not specified',
-        work_experience: profile.work_experience || 'Not specified',
-        skills: profile.skills || [],
-        competencies: profile.competencies || [],
-        courses_count: courses.length,
-        created_at: t.created_at
-      };
-    });
-
-    return res.json({ success: true, data: enriched });
-  } catch (error) {
-    console.error('getAdminTrainers error:', error);
-    res.status(500).json({ success: false, message: 'Server error retrieving trainers.' });
-  }
-}
-
-export function getAdminQueries(req, res) {
-  try {
-    return res.json({
-      success: true,
-      data: memoryStore.queries
-    });
-  } catch (error) {
-    console.error('getAdminQueries error:', error);
-    res.status(500).json({ success: false, message: 'Server error retrieving queries.' });
-  }
-}
-
-export function updateAdminQuery(req, res) {
-  try {
-    const { id } = req.params;
-    const { response, status, assigned_to } = req.body;
-
-    const query = memoryStore.queries.find(q => q.id === id);
-    if (!query) {
-      return res.status(404).json({ success: false, message: 'Query not found.' });
-    }
-
-    if (response !== undefined) query.response = response;
-    if (status !== undefined) {
-      query.status = status;
-      if (status === 'RESOLVED' || status === 'CLOSED') {
-        query.resolved_at = new Date().toISOString();
+        let matches = 0;
+        if (skillsString.includes(subLower)) matches += 20;
+        if (qualString.includes(subLower)) matches += 15;
+        if (expString.includes(subLower)) matches += 10;
+        matchScore = Math.min(99, matchScore + matches);
       }
-    }
-    if (assigned_to !== undefined) query.assigned_to = assigned_to;
 
-    return res.json({
+      return {
+        id: tr.id,
+        name: tr.name,
+        email: tr.email,
+        organization: tr.organization,
+        department: tr.department,
+        designation: tr.designation,
+        skills: tr.skills || [],
+        qualifications: tr.qualifications || "Not specified",
+        experience: tr.experience || "Not specified",
+        interests: tr.interests || [],
+        coursesTaughtCount: trainerCourses.length,
+        avgRating: parseFloat(avgCourseRating),
+        matchScore
+      };
+    });
+
+    // Sort by match score descending
+    mappedTrainers.sort((a, b) => b.matchScore - a.matchScore);
+
+    res.status(200).json({
       success: true,
-      message: 'Query updated successfully.',
-      data: query
+      querySubject: subject || "All Competencies",
+      totalTrainers: mappedTrainers.length,
+      trainers: mappedTrainers
     });
   } catch (error) {
-    console.error('updateAdminQuery error:', error);
-    res.status(500).json({ success: false, message: 'Server error updating query.' });
+    res.status(500).json({ success: false, message: "Competency mapping search failed.", error: error.message });
   }
-}
+};
 
-export function getAnnouncements(req, res) {
+export const getAnnouncements = async (req, res) => {
   try {
-    const publishedOnly = req.query.published === 'true';
-    let list = [...memoryStore.announcements];
-    if (publishedOnly) {
-      list = list.filter(a => a.published);
-    }
-    return res.json({ success: true, data: list });
+    const announcements = await dataService.getAnnouncements();
+    res.status(200).json({ success: true, announcements });
   } catch (error) {
-    console.error('getAnnouncements error:', error);
-    res.status(500).json({ success: false, message: 'Server error retrieving announcements.' });
+    res.status(500).json({ success: false, message: "Failed to fetch announcements.", error: error.message });
   }
-}
+};
 
-export function createAnnouncement(req, res) {
+export const createAnnouncement = async (req, res) => {
   try {
-    const { title, content, category, published } = req.body;
-
+    const { title, content, category, priority } = req.body;
     if (!title || !content) {
-      return res.status(400).json({ success: false, message: 'Title and content are required.' });
+      return res.status(400).json({ success: false, message: "Title and content are required." });
     }
 
     const newAnnouncement = {
-      id: uuidv4(),
+      id: `anc-${uuidv4().substring(0, 8)}`,
       title,
       content,
-      category: category || 'Platform Update',
-      created_by: req.user.id,
-      author_name: req.user.name,
-      published: published !== undefined ? published : true,
-      created_at: new Date().toISOString()
+      category: category || "General",
+      priority: priority || "medium",
+      authorName: req.user.name,
+      publishedAt: new Date().toISOString(),
+      active: true
     };
 
-    memoryStore.announcements.unshift(newAnnouncement);
+    await dataService.createAnnouncement(newAnnouncement);
 
-    return res.status(201).json({
+    res.status(201).json({
       success: true,
-      message: 'Announcement published successfully.',
-      data: newAnnouncement
+      message: "Announcement broadcasted successfully to all trainees and trainers.",
+      announcement: newAnnouncement
     });
   } catch (error) {
-    console.error('createAnnouncement error:', error);
-    res.status(500).json({ success: false, message: 'Server error creating announcement.' });
+    res.status(500).json({ success: false, message: "Failed to broadcast announcement.", error: error.message });
   }
-}
+};
 
-export function deleteAnnouncement(req, res) {
+export const deleteAnnouncement = async (req, res) => {
   try {
     const { id } = req.params;
-    const index = memoryStore.announcements.findIndex(a => a.id === id);
-    if (index === -1) {
-      return res.status(404).json({ success: false, message: 'Announcement not found.' });
-    }
-    memoryStore.announcements.splice(index, 1);
-    return res.json({ success: true, message: 'Announcement deleted.' });
+    await dataService.deleteAnnouncement(id);
+    res.status(200).json({ success: true, message: "Announcement removed." });
   } catch (error) {
-    console.error('deleteAnnouncement error:', error);
-    res.status(500).json({ success: false, message: 'Server error deleting announcement.' });
+    res.status(500).json({ success: false, message: "Failed to delete announcement.", error: error.message });
   }
-}
+};
 
-export function getAchievements(req, res) {
+export const getReports = async (req, res) => {
   try {
-    const publishedOnly = req.query.published === 'true';
-    let list = [...memoryStore.achievements];
-    if (publishedOnly) {
-      list = list.filter(a => a.published);
-    }
-    return res.json({ success: true, data: list });
-  } catch (error) {
-    console.error('getAchievements error:', error);
-    res.status(500).json({ success: false, message: 'Server error retrieving achievements.' });
-  }
-}
+    const courses = await dataService.getCourses();
+    const enrollments = await dataService.getEnrollments();
+    const submissions = await dataService.getSubmissions();
+    const users = await dataService.getUsers();
 
-export function publishAchievement(req, res) {
-  try {
-    const { id } = req.params;
-    const achievement = memoryStore.achievements.find(a => a.id === id);
-    if (!achievement) {
-      return res.status(404).json({ success: false, message: 'Achievement not found.' });
-    }
-    achievement.status = 'APPROVED';
-    achievement.published = true;
-    return res.json({
+    // Grouping stats by course category
+    const categoryStats = {};
+    courses.forEach((c) => {
+      if (!categoryStats[c.category]) {
+        categoryStats[c.category] = { category: c.category, courses: 0, enrollments: 0 };
+      }
+      categoryStats[c.category].courses += 1;
+      categoryStats[c.category].enrollments += (c.enrolledCount || 0);
+    });
+
+    res.status(200).json({
       success: true,
-      message: 'Achievement approved and published.',
-      data: achievement
+      reportDate: new Date().toISOString(),
+      executiveSummary: {
+        totalEnrolledTrainees: enrollments.length,
+        certifiedCandidates: submissions.filter((s) => s.passed).length,
+        overallPassingRate: submissions.length > 0
+          ? `${Math.round((submissions.filter((s) => s.passed).length / submissions.length) * 100)}%`
+          : "N/A"
+      },
+      categoryBreakdown: Object.values(categoryStats),
+      topPerformingCourses: courses.map((c) => ({
+        id: c.id,
+        title: c.title,
+        category: c.category,
+        enrolledCount: c.enrolledCount,
+        rating: c.rating
+      }))
     });
   } catch (error) {
-    console.error('publishAchievement error:', error);
-    res.status(500).json({ success: false, message: 'Server error publishing achievement.' });
+    res.status(500).json({ success: false, message: "Failed to generate report.", error: error.message });
   }
-}
+};

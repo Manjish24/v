@@ -1,275 +1,225 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import api from '../../services/api';
-import DashboardCard from '../../components/common/DashboardCard';
-import Badge from '../../components/common/Badge';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  CartesianGrid
-} from 'recharts';
+import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
+import { api } from "../../services/api";
+import { StatCard } from "../../components/StatCard";
 import {
   Users,
-  Award,
   BookOpen,
-  CheckCircle2,
-  BrainCircuit,
-  HelpCircle,
-  Megaphone,
+  Award,
+  ShieldCheck,
+  CheckCircle,
+  XCircle,
+  FileBarChart,
   ArrowRight,
-  TrendingUp,
-  ShieldAlert
-} from 'lucide-react';
+  Sparkles,
+  UserCheck,
+  Clock
+} from "lucide-react";
+import { formatDate } from "../../utils/formatters";
 
-export default function AdminDashboard() {
+export const AdminDashboard = () => {
   const [stats, setStats] = useState(null);
+  const [recentUsers, setRecentUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function loadAdminStats() {
-      try {
-        const res = await api.get('/admin/statistics');
-        if (res.data.success) {
-          setStats(res.data.data);
-        }
-      } catch (err) {
-        console.error('Error fetching admin statistics:', err);
-      } finally {
-        setLoading(false);
-      }
+  const fetchStats = async () => {
+    try {
+      const response = await api.getAdminStats();
+      setStats(response.stats);
+      setRecentUsers(response.recentUsers || []);
+    } catch (err) {
+      console.error("Failed to load admin stats:", err);
+    } finally {
+      setLoading(false);
     }
-    loadAdminStats();
-  }, []);
-
-  const totals = stats?.totals || {
-    trainees: 2,
-    trainers: 2,
-    courses: 3,
-    certifications: 1,
-    average_score: 84,
-    completion_rate: 78
   };
 
-  const trends = stats?.enrollment_trends || [
-    { month: 'Jan', enrollments: 24, completions: 18 },
-    { month: 'Feb', enrollments: 38, completions: 26 },
-    { month: 'Mar', enrollments: 45, completions: 34 },
-    { month: 'Apr', enrollments: 52, completions: 40 },
-    { month: 'May', enrollments: 68, completions: 51 },
-    { month: 'Jun', enrollments: 84, completions: 64 },
-    { month: 'Jul', enrollments: 95, completions: 72 }
-  ];
+  useEffect(() => {
+    fetchStats();
+  }, []);
 
-  const pendingUsersCount = stats?.pending_users_count || 1;
-  const openQueriesCount = stats?.recent_queries_count || 0;
+  const handleApprove = async (userId) => {
+    try {
+      await api.updateUserStatus(userId, { status: "approved" });
+      fetchStats();
+      alert("User approved successfully!");
+    } catch (err) {
+      alert(err.message || "Failed to approve user.");
+    }
+  };
+
+  const pendingUsers = recentUsers.filter((u) => u.status === "pending");
 
   return (
     <div className="space-y-8">
-      {/* Admin Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 text-white rounded-2xl p-6 sm:p-8 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-        <div className="space-y-2">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 text-xs font-semibold">
-            <Award className="w-3.5 h-3.5" />
-            Executive Administration Console
-          </div>
+      {/* Top Welcome Card */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 text-white p-6 sm:p-8 shadow-xl">
+        <div className="relative z-10 max-w-2xl">
+          <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 text-xs font-semibold mb-3 border border-blue-400/30">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Ministry Directorate Administration</span>
+          </span>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-            Capacity Connect Governance Portal
+            CAPACITY CONNECT Directorate
           </h1>
-          <p className="text-slate-300 text-xs sm:text-sm max-w-xl">
-            National capacity metrics, user authorization approvals, audit logging, and AI Capacity Competency assignments.
+          <p className="text-sm text-blue-200 mt-2">
+            Centralized Command for MoES / IMD Personnel Capacity Building, Role Approvals & Competency Oversight
           </p>
-        </div>
 
-        <div className="flex flex-wrap gap-3">
-          <Link
-            to="/admin/competency"
-            className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs sm:text-sm font-bold rounded-xl transition-all shadow-md flex items-center gap-2"
-          >
-            <BrainCircuit className="w-4 h-4" />
-            Capacity Competency Matcher
-          </Link>
-          <Link
-            to="/admin/users"
-            className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs sm:text-sm font-semibold rounded-xl transition-colors flex items-center gap-2"
-          >
-            <Users className="w-4 h-4" />
-            Manage Users
-          </Link>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Link
+              to="/admin/manage-users"
+              className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow transition"
+            >
+              <Users className="w-4 h-4" />
+              <span>Manage User Directory</span>
+            </Link>
+            <Link
+              to="/admin/reports"
+              className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs font-semibold transition"
+            >
+              <FileBarChart className="w-4 h-4" />
+              <span>Competency Mapping & Reports</span>
+            </Link>
+          </div>
         </div>
       </div>
 
-      {/* Pending Approvals Alert Bar if any */}
-      {pendingUsersCount > 0 && (
-        <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <ShieldAlert className="w-5 h-5 text-amber-600 flex-shrink-0" />
-            <div>
-              <p className="text-xs font-bold text-amber-900">
-                {pendingUsersCount} User Registration(s) Pending Admin Approval
-              </p>
-              <p className="text-[11px] text-amber-700">
-                Review trainee & trainer credentials before activating full portal access.
-              </p>
-            </div>
-          </div>
-          <Link
-            to="/admin/users?status=PENDING"
-            className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl flex-shrink-0 transition-colors"
-          >
-            Review Applications
-          </Link>
-        </div>
-      )}
-
-      {/* Platform Statistics Overview Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <DashboardCard
-          title="Total Trainees"
-          value={totals.trainees}
-          subtitle="Enrolled learners"
+      {/* KPI Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          title="Total Personnel"
+          value={stats?.totalUsers || 0}
+          subtitle={`${stats?.totalTrainees || 0} Trainees · ${stats?.totalTrainers || 0} Trainers`}
           icon={Users}
           color="blue"
         />
-        <DashboardCard
-          title="Accredited Trainers"
-          value={totals.trainers}
-          subtitle="Faculty & experts"
-          icon={Award}
-          color="purple"
-        />
-        <DashboardCard
-          title="Published Courses"
-          value={totals.courses}
-          subtitle="Active curriculum"
-          icon={BookOpen}
+        <StatCard
+          title="Pending Approvals"
+          value={stats?.pendingApprovals || 0}
+          subtitle="Awaiting Verification"
+          icon={Clock}
           color="amber"
+          badge={stats?.pendingApprovals > 0 ? "Action Required" : null}
         />
-        <DashboardCard
-          title="Issued Certifications"
-          value={totals.certifications}
-          subtitle="Cryptographically verified"
-          icon={CheckCircle2}
-          color="green"
+        <StatCard
+          title="Courses Active"
+          value={stats?.totalCourses || 0}
+          subtitle={`${stats?.totalEnrollments || 0} Enrolled Candidates`}
+          icon={BookOpen}
+          color="emerald"
+        />
+        <StatCard
+          title="Certifications Issued"
+          value={stats?.totalCertificatesIssued || 0}
+          subtitle={`Pass Rate: ${stats?.completionRate || 0}%`}
+          icon={Award}
+          color="sky"
         />
       </div>
 
-      {/* Analytics Recharts Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Growth Trends Line Chart */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
+      {/* Main Admin Columns: Pending Approvals & Quick Rosters */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Pending Approvals List */}
+        <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-slate-900">Enrollment & Completion Trends</h3>
-            <span className="text-xs text-slate-400">Monthly Progression</span>
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Pending User Approvals</h2>
+              <p className="text-xs text-slate-500">Verify new trainers and officers joining the portal</p>
+            </div>
+            <Link to="/admin/manage-users" className="text-xs font-bold text-blue-600 hover:underline">
+              View All Users
+            </Link>
           </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trends} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} />
-                <YAxis stroke="#94a3b8" fontSize={11} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#1e293b', borderRadius: '8px', color: '#fff', fontSize: '12px' }}
-                />
-                <Line type="monotone" dataKey="enrollments" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="completions" stroke="#10b981" strokeWidth={3} dot={{ r: 4 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="flex items-center justify-center gap-6 text-xs text-slate-500 pt-2">
-            <span className="flex items-center gap-1.5 font-medium">
-              <span className="w-3 h-3 rounded-full bg-blue-500"></span> Total Enrollments
-            </span>
-            <span className="flex items-center gap-1.5 font-medium">
-              <span className="w-3 h-3 rounded-full bg-emerald-500"></span> Certified Completions
-            </span>
+
+          {pendingUsers.length === 0 ? (
+            <div className="p-8 text-center bg-white rounded-2xl border border-slate-100 shadow-sm">
+              <CheckCircle className="w-10 h-10 text-emerald-500 mx-auto mb-2" />
+              <p className="text-sm font-bold text-slate-800">All User Approvals Up to Date</p>
+              <p className="text-xs text-slate-500 mt-1">No pending trainer or trainee registration requests.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {pendingUsers.map((user) => (
+                <div
+                  key={user.id}
+                  className="p-5 bg-white rounded-2xl border border-amber-200/80 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm font-bold text-slate-900">{user.name}</span>
+                      <span className="text-[10px] font-bold uppercase text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                        {user.role}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600">
+                      {user.email} · {user.organization} ({user.department})
+                    </p>
+                    <p className="text-[11px] text-slate-500">
+                      Qualifications: {user.qualifications || "Not specified"}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center space-x-2 shrink-0">
+                    <button
+                      onClick={() => handleApprove(user.id)}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition flex items-center space-x-1"
+                    >
+                      <UserCheck className="w-3.5 h-3.5" />
+                      <span>Approve Access</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Quick Competency Callout */}
+          <div className="p-6 bg-gradient-to-r from-blue-900 to-indigo-900 rounded-3xl text-white shadow-md flex items-center justify-between">
+            <div>
+              <span className="text-[10px] uppercase font-bold text-sky-300 tracking-wider">SIH Problem #26075 Core Feature</span>
+              <h3 className="text-base font-extrabold mt-1">Trainer Competency Mapping Engine</h3>
+              <p className="text-xs text-sky-200 mt-1 max-w-md">
+                Match verified trainer specializations against upcoming operational meteorological courses.
+              </p>
+            </div>
+            <Link
+              to="/admin/reports"
+              className="px-4 py-2.5 bg-white text-blue-900 hover:bg-sky-50 font-bold text-xs rounded-xl shadow transition shrink-0"
+            >
+              Run Mapping Tool
+            </Link>
           </div>
         </div>
 
-        {/* Competency Subject Breakdown */}
-        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-bold text-slate-900">Curriculum by Domain</h3>
-            <span className="text-xs text-slate-400">Institutional Distribution</span>
-          </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={stats?.subject_breakdown || [
-                  { subject: 'Machine Learning', count: 1 },
-                  { subject: 'Web Dev', count: 1 },
-                  { subject: 'Cloud Computing', count: 1 },
-                  { subject: 'Data Science', count: 1 }
-                ]}
-                margin={{ top: 10, right: 20, left: -10, bottom: 0 }}
-              >
-                <XAxis dataKey="subject" stroke="#94a3b8" fontSize={11} />
-                <YAxis stroke="#94a3b8" fontSize={11} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#1e293b', borderRadius: '8px', color: '#fff', fontSize: '12px' }}
-                />
-                <Bar dataKey="count" fill="#8b5cf6" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+        {/* Right Activity Column */}
+        <div className="space-y-6">
+          <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+            <h3 className="font-bold text-sm text-slate-900 border-b border-slate-100 pb-2">
+              Recent Portal Registrations
+            </h3>
+            <div className="space-y-3">
+              {recentUsers.slice(0, 5).map((user) => (
+                <div key={user.id} className="flex items-center justify-between text-xs">
+                  <div className="truncate pr-2">
+                    <p className="font-bold text-slate-800 truncate">{user.name}</p>
+                    <p className="text-[11px] text-slate-400 truncate">{user.email}</p>
+                  </div>
+                  <span
+                    className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded border ${
+                      user.status === "approved"
+                        ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                        : "bg-amber-50 text-amber-800 border-amber-200"
+                    }`}
+                  >
+                    {user.status}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
-
-      {/* Governance Quick Links */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        <Link
-          to="/admin/competency"
-          className="bg-gradient-to-tr from-purple-900 to-indigo-900 text-white p-6 rounded-2xl shadow-lg hover:shadow-xl transition-all space-y-3"
-        >
-          <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
-            <BrainCircuit className="w-6 h-6 text-purple-300" />
-          </div>
-          <h3 className="font-extrabold text-lg">Capacity Competency</h3>
-          <p className="text-xs text-slate-300 leading-relaxed">
-            Multi-criteria weighted matching engine to identify optimal trainers for institutional subject requirements.
-          </p>
-          <div className="text-xs font-bold text-purple-300 flex items-center gap-1 pt-1">
-            Launch Competency Engine <ArrowRight className="w-3.5 h-3.5" />
-          </div>
-        </Link>
-
-        <Link
-          to="/admin/users"
-          className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs hover:shadow-md transition-all space-y-3"
-        >
-          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-            <Users className="w-6 h-6" />
-          </div>
-          <h3 className="font-bold text-slate-900 text-lg">User Governance</h3>
-          <p className="text-xs text-slate-500 leading-relaxed">
-            Approve, suspend, or promote user accounts across Trainee, Trainer, and Admin roles.
-          </p>
-          <div className="text-xs font-bold text-blue-600 flex items-center gap-1 pt-1">
-            Manage User Records <ArrowRight className="w-3.5 h-3.5" />
-          </div>
-        </Link>
-
-        <Link
-          to="/admin/queries"
-          className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs hover:shadow-md transition-all space-y-3"
-        >
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-            <HelpCircle className="w-6 h-6" />
-          </div>
-          <h3 className="font-bold text-slate-900 text-lg">Query Resolution</h3>
-          <p className="text-xs text-slate-500 leading-relaxed">
-            Respond to trainee inquiries, resolve escalations, and dispatch platform notices.
-          </p>
-          <div className="text-xs font-bold text-emerald-600 flex items-center gap-1 pt-1">
-            Open Helpdesk ({openQueriesCount}) <ArrowRight className="w-3.5 h-3.5" />
-          </div>
-        </Link>
       </div>
     </div>
   );
-}
+};
