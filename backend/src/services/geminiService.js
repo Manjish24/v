@@ -69,6 +69,14 @@ const parseJsonResponse = (text) => {
   }
 };
 
+const normalizeTheory = (result) => ({
+  title: String(result.title || "Student Theory").trim(),
+  notes: String(result.notes || "").trim(),
+  keyPoints: Array.isArray(result.keyPoints)
+    ? result.keyPoints.map((point) => String(point).trim()).filter(Boolean)
+    : [],
+});
+
 // --------------------------------------------------------------------------
 // Prompt builder
 // --------------------------------------------------------------------------
@@ -181,6 +189,48 @@ percentage when the full video cannot be verified.`;
   }
 
   return normalizeVerification(parseJsonResponse(responseText));
+};
+
+// Generates student-facing theory only after the video passes verification.
+export const generateVideoTheory = async ({
+  courseName,
+  videoTitle,
+  topics,
+  competencies,
+  verification,
+}) => {
+  const ai = getClient();
+  const prompt = `
+You are an educational content writer for CAPACITY CONNECT.
+
+Create student-friendly theory from this already verified YouTube lesson analysis.
+Do not invent topics that are not supported by the analysis. Keep the notes clear,
+accurate, and useful for revision.
+
+COURSE NAME: ${courseName}
+VIDEO TITLE: ${videoTitle}
+TOPICS: ${topics.join(", ")}
+COMPETENCIES: ${competencies.join(", ")}
+ACADEMIC SUMMARY: ${verification.summary}
+CONCEPTS COVERED: ${verification.conceptsCovered.join(", ")}
+TOPIC ANALYSIS: ${JSON.stringify(verification.topicAnalysis)}
+COMPETENCY ANALYSIS: ${JSON.stringify(verification.competencyMapping)}
+
+Return ONLY valid JSON in this exact shape:
+{
+  "title": "Student theory title",
+  "notes": "Well-structured study notes in plain text with short paragraphs.",
+  "keyPoints": ["Important point 1", "Important point 2"]
+}
+`.trim();
+
+  const response = await ai.models.generateContent({
+    model: MODEL(),
+    contents: prompt,
+    config: { responseMimeType: "application/json" },
+  });
+
+  return normalizeTheory(parseJsonResponse(response.text));
 };
 
 // --------------------------------------------------------------------------

@@ -18,6 +18,7 @@ import {
   ListChecks,
   BadgeCheck,
   Target,
+  FileText,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -508,6 +509,32 @@ export const VideoVerifier = () => {
                     )}
                     <div>
                       <p className="font-bold text-slate-800">{item.competency}</p>
+
+                  {result.status === "VERIFIED" && result.theory && (
+                    <div className="bg-sky-50 rounded-2xl border border-sky-200 shadow-sm p-5 space-y-4">
+                      <h4 className="text-xs font-bold text-slate-700 flex items-center gap-2 uppercase tracking-wide">
+                        <FileText className="w-4 h-4 text-sky-600" />
+                        Student Theory
+                      </h4>
+                      <h5 className="text-base font-extrabold text-slate-900">{result.theory.title}</h5>
+                      <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
+                        {result.theory.notes}
+                      </div>
+                      {result.theory.keyPoints?.length > 0 && (
+                        <div>
+                          <p className="text-xs font-bold text-slate-700 mb-2">Key Points</p>
+                          <ul className="space-y-2">
+                            {result.theory.keyPoints.map((point, i) => (
+                              <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
+                                <CheckCircle2 className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
+                                <span>{point}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
                       {item.evidence && <p className="text-slate-500 mt-0.5 leading-relaxed">{item.evidence}</p>}
                     </div>
                   </div>

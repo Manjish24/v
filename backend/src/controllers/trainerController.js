@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from "uuid";
 import { dataService } from "../services/dataService.js";
 import { validateCourse } from "../models/Course.js";
 import { validateAssessment } from "../models/Assessment.js";
-import { verifyCourseContent, verifyYouTubeVideo } from "../services/geminiService.js";
+import { generateVideoTheory, verifyCourseContent, verifyYouTubeVideo } from "../services/geminiService.js";
 import { getVideoMetadata } from "../services/youtubeService.js";
 
 const isYouTubeUrl = (value) => {
@@ -84,15 +84,23 @@ export const verifyVideo = async (req, res) => {
         success: false,
         verified: false,
         message: "Video does not sufficiently map to the academic course.",
-        data: verification,
+        data: { ...verification, theory: null },
       });
     }
+
+    const theory = await generateVideoTheory({
+      courseName,
+      videoTitle,
+      topics,
+      competencies,
+      verification,
+    });
 
     return res.status(200).json({
       success: true,
       verified: true,
       message: "Video successfully verified.",
-      data: verification,
+      data: { ...verification, theory },
     });
   } catch (error) {
     console.error("Video verification failed:", error.message);
@@ -161,9 +169,17 @@ export const createCourse = async (req, res) => {
         success: false,
         verified: false,
         message: "Course content does not map sufficiently to the academic course (minimum 85%).",
-        verification
+        verification: { ...verification, theory: null }
       });
     }
+
+    const theory = await generateVideoTheory({
+      courseName: category,
+      videoTitle: primaryModule.title || title,
+      topics: normalizedTopics,
+      competencies: normalizedTopics,
+      verification,
+    });
 
     const newCourse = {
       id: `crs-${uuidv4().substring(0, 8)}`,
@@ -180,6 +196,7 @@ export const createCourse = async (req, res) => {
       rating: 5.0,
       verification: {
         ...verification,
+        theory,
         verifiedAt: new Date().toISOString()
       },
       modules: Array.isArray(modules)
@@ -189,7 +206,11 @@ export const createCourse = async (req, res) => {
             duration: m.duration || "45 mins",
             videoUrl: m.videoUrl || "https://www.youtube.com/embed/dQw4w9WgXcQ",
             timestamp: m.timestamp || "",
-            content: m.content || "",
+            content:
+              m.content ||
+              (idx === 0
+                ? `${theory.notes}${theory.keyPoints.length ? `\n\nKey Points:\n${theory.keyPoints.map((point) => `- ${point}`).join("\n")}` : ""}`
+                : ""),
             resources: m.resources || []
           }))
         : [],
