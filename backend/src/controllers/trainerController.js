@@ -2,6 +2,109 @@ import { v4 as uuidv4 } from "uuid";
 import { dataService } from "../services/dataService.js";
 import { validateCourse } from "../models/Course.js";
 import { validateAssessment } from "../models/Assessment.js";
+import { verifyCourseContent, verifyYouTubeVideo } from "../services/geminiService.js";
+import { getVideoMetadata } from "../services/youtubeService.js";
+
+const isYouTubeUrl = (value) => {
+  try {
+    const url = new URL(value);
+    return ["www.youtube.com", "youtube.com", "youtu.be", "m.youtube.com"].includes(url.hostname);
+  } catch {
+    return false;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// GET /api/trainer/youtube-metadata?url=<youtubeUrl>
+// Fetches video title, thumbnail, duration via YouTube Data API v3.
+// ---------------------------------------------------------------------------
+export const getYouTubeMetadata = async (req, res) => {
+  try {
+    const { url } = req.query;
+
+    if (!url) {
+      return res.status(400).json({ success: false, message: "Query parameter 'url' is required." });
+    }
+
+    if (!isYouTubeUrl(url)) {
+      return res.status(400).json({ success: false, message: "Invalid YouTube URL." });
+    }
+
+    const metadata = await getVideoMetadata(url);
+
+    return res.status(200).json({ success: true, metadata });
+  } catch (error) {
+    console.error("YouTube metadata fetch failed:", error.message);
+    return res.status(502).json({
+      success: false,
+      message: error.message || "Failed to fetch YouTube video metadata.",
+    });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// POST /api/trainer/verify-video
+// Verifies a YouTube video against a course using Gemini AI.
+// ---------------------------------------------------------------------------
+export const verifyVideo = async (req, res) => {
+  try {
+    let { courseName, videoTitle, videoUrl, topics, competencies = topics } = req.body;
+
+    if (!courseName || !videoUrl || !Array.isArray(topics) || topics.length === 0 || !Array.isArray(competencies) || competencies.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Course name, YouTube URL, at least one topic, and one competency are required.",
+      });
+    }
+
+    if (!isYouTubeUrl(videoUrl)) {
+      return res.status(400).json({ success: false, message: "Invalid YouTube URL." });
+    }
+
+    // Auto-fetch video title from YouTube API if the caller didn't provide it
+    if (!videoTitle) {
+      try {
+        const meta = await getVideoMetadata(videoUrl);
+        videoTitle = meta.title;
+      } catch {
+        videoTitle = "Unknown Video";
+      }
+    }
+
+    const verification = await verifyYouTubeVideo({
+      courseName,
+      videoTitle,
+      videoUrl,
+      topics: topics.map((topic) => String(topic).trim()).filter(Boolean),
+      competencies: competencies.map((competency) => String(competency).trim()).filter(Boolean),
+    });
+
+    if (verification.mappingPercentage < 85) {
+      return res.status(422).json({
+        success: false,
+        verified: false,
+        message: "Video does not sufficiently map to the academic course.",
+        data: verification,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      verified: true,
+      message: "Video successfully verified.",
+      data: verification,
+    });
+  } catch (error) {
+    console.error("Video verification failed:", error.message);
+    return res.status(502).json({
+      success: false,
+      verified: false,
+      message: "Gemini video verification failed.",
+      error: error.message,
+    });
+  }
+};
+
 
 export const getTrainerCourses = async (req, res) => {
   try {
@@ -18,11 +121,48 @@ export const createCourse = async (req, res) => {
   try {
     const trainerId = req.user.id;
     const trainerName = req.user.name;
-    const { title, category, duration, level, description, thumbnail, modules } = req.body;
+    const { title, category, duration, level, description, thumbnail, modules, topics = [] } = req.body;
 
     const validation = validateCourse({ title, category, trainerId });
     if (!validation.isValid) {
       return res.status(400).json({ success: false, message: validation.errors.join(", ") });
+    }
+
+    if (!Array.isArray(modules) || modules.length === 0) {
+      return res.status(400).json({ success: false, message: "At least one course module is required." });
+    }
+
+    const normalizedTopics = topics.map((topic) => String(topic).trim()).filter(Boolean);
+    const primaryModule = modules[0];
+
+    if (normalizedTopics.length === 0) {
+      return res.status(400).json({ success: false, message: "At least one academic topic is required." });
+    }
+
+    if (!primaryModule.videoUrl || !isYouTubeUrl(primaryModule.videoUrl)) {
+      return res.status(400).json({ success: false, message: "A valid YouTube URL is required for the first module." });
+    }
+
+    let verification;
+    try {
+      verification = await verifyYouTubeVideo({
+        courseName: category,
+        videoTitle: primaryModule.title || title,
+        videoUrl: primaryModule.videoUrl,
+        topics: normalizedTopics,
+        competencies: normalizedTopics
+      });
+    } catch (error) {
+      return res.status(502).json({ success: false, message: error.message });
+    }
+
+    if (verification.mappingPercentage < 85) {
+      return res.status(422).json({
+        success: false,
+        verified: false,
+        message: "Course content does not map sufficiently to the academic course (minimum 85%).",
+        verification
+      });
     }
 
     const newCourse = {
@@ -38,12 +178,17 @@ export const createCourse = async (req, res) => {
       status: "published",
       enrolledCount: 0,
       rating: 5.0,
+      verification: {
+        ...verification,
+        verifiedAt: new Date().toISOString()
+      },
       modules: Array.isArray(modules)
         ? modules.map((m, idx) => ({
             id: m.id || `mod-${idx + 101}`,
             title: m.title || `Module ${idx + 1}`,
             duration: m.duration || "45 mins",
             videoUrl: m.videoUrl || "https://www.youtube.com/embed/dQw4w9WgXcQ",
+            timestamp: m.timestamp || "",
             content: m.content || "",
             resources: m.resources || []
           }))
@@ -55,8 +200,9 @@ export const createCourse = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: "Course created successfully!",
-      course: newCourse
+      message: "Course verified and created successfully!",
+      course: newCourse,
+      verification
     });
   } catch (error) {
     res.status(500).json({ success: false, message: "Failed to create course.", error: error.message });

@@ -22,6 +22,7 @@ import { CreateCourse } from "../pages/trainer/CreateCourse";
 import { ManageCourses as TrainerManageCourses } from "../pages/trainer/ManageCourses";
 import { CreateAssessment } from "../pages/trainer/CreateAssessment";
 import { TraineeProgress } from "../pages/trainer/TraineeProgress";
+import { VideoVerifier } from "../pages/trainer/VideoVerifier";
 
 // Admin Pages
 import { AdminDashboard } from "../pages/admin/AdminDashboard";
@@ -122,6 +123,14 @@ export const AppRoutes = () => {
           element={
             <ProtectedRoute allowedRoles={["trainer", "admin"]}>
               <TraineeProgress />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="trainer/verify-video"
+          element={
+            <ProtectedRoute allowedRoles={["trainer", "admin"]}>
+              <VideoVerifier />
             </ProtectedRoute>
           }
         />

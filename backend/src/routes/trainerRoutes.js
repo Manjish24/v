@@ -2,6 +2,8 @@ import express from "express";
 import {
   getTrainerCourses,
   createCourse,
+  verifyVideo,
+  getYouTubeMetadata,
   updateCourse,
   createAssessment,
   getTrainerAssessments,
@@ -19,6 +21,8 @@ router.use(verifyToken, authorizeRoles("trainer", "admin"));
 
 router.get("/courses", getTrainerCourses);
 router.post("/courses", createCourse);
+router.post("/verify-video", verifyVideo);
+router.get("/youtube-metadata", getYouTubeMetadata);
 router.put("/courses/:id", updateCourse);
 
 router.get("/assessments", getTrainerAssessments);

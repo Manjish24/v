@@ -6,6 +6,7 @@ import { PlusCircle, Trash2, ArrowLeft, BookOpen, Video, FileText } from "lucide
 export const CreateCourse = () => {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
+  const [verification, setVerification] = useState(null);
 
   const [courseData, setCourseData] = useState({
     title: "",
@@ -13,13 +14,15 @@ export const CreateCourse = () => {
     duration: "6 Weeks",
     level: "Intermediate",
     description: "",
+    topics: [""],
     thumbnail: "https://images.unsplash.com/photo-1590055531615-f16d36ffe8ec?auto=format&fit=crop&w=800&q=80",
     modules: [
       {
         id: "mod-1",
         title: "Module 1: Principles and Atmospheric Foundations",
         duration: "45 mins",
-        videoUrl: "https://www.youtube.com/embed/dQw4w9WgXcQ",
+        videoUrl: "",
+        timestamp: "",
         content: "Overview of basic concepts, atmospheric dynamics, and operational guidelines.",
         resources: [{ name: "Module_Handbook.pdf", type: "pdf", size: "2.4 MB" }]
       }
@@ -36,7 +39,8 @@ export const CreateCourse = () => {
           id: `mod-${newIdx}`,
           title: `Module ${newIdx}: New Instructional Unit`,
           duration: "50 mins",
-          videoUrl: "https://www.youtube.com/embed/dQw4w9WgXcQ",
+          videoUrl: "",
+          timestamp: "",
           content: "Session summary and technical explanation.",
           resources: []
         }
@@ -66,11 +70,22 @@ export const CreateCourse = () => {
     }
     setSubmitting(true);
     try {
-      await api.createCourse(courseData);
-      alert("Course created successfully!");
+      const result = await api.createCourse({
+        ...courseData,
+        topics: courseData.topics.map((topic) => topic.trim()).filter(Boolean)
+      });
+      setVerification(result.verification);
+      alert(`Course verified at ${result.verification.mappingPercentage}% and created successfully.`);
       navigate("/trainer/manage-courses");
     } catch (err) {
-      alert(err.message || "Failed to create course.");
+      setVerification(err.verification || null);
+      const mapping = err.verification?.mappingPercentage;
+      const reason = err.verification?.reason;
+      alert([
+        err.message || "Failed to create course.",
+        mapping !== undefined ? `Mapping: ${mapping}%` : "",
+        reason || ""
+      ].filter(Boolean).join("\n"));
     } finally {
       setSubmitting(false);
     }
@@ -106,6 +121,17 @@ export const CreateCourse = () => {
               value={courseData.title}
               onChange={(e) => setCourseData({ ...courseData, title: e.target.value })}
               placeholder="e.g. Advanced Doppler Weather Radar (DWR) Echo Analysis"
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-amber-500 focus:bg-white"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Topics for Academic Mapping</label>
+            <input
+              type="text"
+              value={courseData.topics.join(", ")}
+              onChange={(e) => setCourseData({ ...courseData, topics: e.target.value.split(",") })}
+              placeholder="e.g. Doppler principles, reflectivity, velocity products"
               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-amber-500 focus:bg-white"
             />
           </div>
@@ -219,12 +245,20 @@ export const CreateCourse = () => {
                   </div>
                 </div>
 
-                <div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <input
                     type="text"
+                    required
                     value={mod.videoUrl}
                     onChange={(e) => handleModuleChange(idx, "videoUrl", e.target.value)}
-                    placeholder="Video Embed / YouTube URL"
+                    placeholder="YouTube video URL"
+                    className="sm:col-span-2 w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs"
+                  />
+                  <input
+                    type="text"
+                    value={mod.timestamp}
+                    onChange={(e) => handleModuleChange(idx, "timestamp", e.target.value)}
+                    placeholder="Timestamp (e.g. 10:30)"
                     className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs"
                   />
                 </div>
@@ -234,7 +268,7 @@ export const CreateCourse = () => {
                     rows={2}
                     value={mod.content}
                     onChange={(e) => handleModuleChange(idx, "content", e.target.value)}
-                    placeholder="Module study notes & technical explanation..."
+                    placeholder="Optional module notes for trainees..."
                     className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs"
                   />
                 </div>
@@ -257,7 +291,7 @@ export const CreateCourse = () => {
             disabled={submitting}
             className="px-6 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-bold rounded-xl text-xs shadow-md transition disabled:opacity-50"
           >
-            {submitting ? "Publishing Course..." : "Publish Course to IMD Portal"}
+            {submitting ? "Verifying Course..." : "Verify & Publish Course"}
           </button>
         </div>
       </form>

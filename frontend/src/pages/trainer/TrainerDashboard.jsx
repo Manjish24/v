@@ -13,7 +13,8 @@ import {
   ArrowRight,
   Upload,
   Sparkles,
-  Trash2
+  Trash2,
+  Youtube
 } from "lucide-react";
 
 export const TrainerDashboard = () => {
@@ -118,6 +119,13 @@ export const TrainerDashboard = () => {
             >
               <CheckSquare className="w-4 h-4" />
               <span>Build MCQ Assessment</span>
+            </Link>
+            <Link
+              to="/trainer/verify-video"
+              className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-400/30 text-xs font-semibold transition"
+            >
+              <Youtube className="w-4 h-4" />
+              <span>Verify YouTube Video</span>
             </Link>
           </div>
         </div>

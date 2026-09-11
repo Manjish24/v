@@ -20,7 +20,10 @@ export const apiRequest = async (endpoint, options = {}) => {
 
   if (!response.ok) {
     const errorMsg = data.message || `Request failed with status ${response.status}`;
-    throw new Error(errorMsg);
+    const error = new Error(errorMsg);
+    error.data = data.data;
+    error.verification = data.verification;
+    throw error;
   }
 
   return data;
@@ -59,6 +62,8 @@ export const api = {
 
   // Trainer
   getTrainerCourses: () => apiRequest("/trainer/courses"),
+  verifyVideo: (video) => apiRequest("/trainer/verify-video", { method: "POST", body: JSON.stringify(video) }),
+  getYouTubeMetadata: (url) => apiRequest(`/trainer/youtube-metadata?url=${encodeURIComponent(url)}`),
   createCourse: (course) => apiRequest("/trainer/courses", { method: "POST", body: JSON.stringify(course) }),
   updateCourse: (id, course) => apiRequest(`/trainer/courses/${id}`, { method: "PUT", body: JSON.stringify(course) }),
   getTrainerAssessments: () => apiRequest("/trainer/assessments"),
